@@ -1057,8 +1057,6 @@ class ResourceExtractorApp:
                 raise Exception("El archivo descargado no es un ZIP válido")
             except Exception as e:
                 raise Exception(f"Error extrayendo archivos: {e}")
-            finally:
-                self.root.after(0, lambda: self.update_btn.config(state=tk.NORMAL, text=_('update_github')))
         
         return True
 
