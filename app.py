@@ -1031,49 +1031,24 @@ class ResourceExtractorApp:
                         
                         rel_path = name[len(root_prefix):]
                         
-                        # Actualizar solo folders de interés (case-insensitive)
-                        rel_path_lower = rel_path.lower()
-                        if rel_path_lower.startswith('kingdoms/') or rel_path_lower.startswith('iconos/'):
-                            target = install_dir / rel_path
-                            
-                            if name.endswith('/'):
-                                target.mkdir(parents=True, exist_ok=True)
-                                continue
-                            
-                            target.parent.mkdir(parents=True, exist_ok=True)
-                            
-                            try:
-                                with zf.open(name) as src, open(target, 'wb') as dst:
-                                    dst.write(src.read())
-                                files_updated += 1
-                                print(f"Actualizado: {rel_path}")
-                            except Exception as e:
-                                print(f"Advertencia: No se pudo actualizar {rel_path}: {e}")
+                        # Saltar directorios vacíos
+                        if not rel_path or name.endswith('/'):
+                            continue
+                        
+                        # Actualizar TODOS los archivos, no solo kingdoms e iconos
+                        target = install_dir / rel_path
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        
+                        try:
+                            with zf.open(name) as src, open(target, 'wb') as dst:
+                                dst.write(src.read())
+                            files_updated += 1
+                            print(f"Actualizado: {rel_path}")
+                        except Exception as e:
+                            print(f"Advertencia: No se pudo actualizar {rel_path}: {e}")
                     
                     if files_updated == 0:
-                        # Debug: mostrar qué archivos hay en el ZIP
-                        available_dirs = set()
-                        all_files = []
-                        for name in zf.namelist():
-                            all_files.append(name)
-                            if not name.startswith(root_prefix):
-                                continue
-                            rel = name[len(root_prefix):]
-                            parts = rel.split('/')
-                            if len(parts) > 1:
-                                available_dirs.add(parts[0].lower())
-                        
-                        # Imprimir debug info a consola
-                        print(f"ROOT PREFIX: {root_prefix}")
-                        print(f"PRIMEROS 20 ARCHIVOS DEL ZIP:")
-                        for f in all_files[:20]:
-                            print(f"  {f}")
-                        print(f"DIRECTORIOS ENCONTRADOS: {sorted(available_dirs) if available_dirs else 'ninguno'}")
-                        
-                        dirs_msg = ", ".join(sorted(available_dirs)) if available_dirs else "ninguno"
-                        error_msg = f"No se encontraron archivos en kingdoms/ o iconos/.\nDirectorios encontrados: {dirs_msg}"
-                        print(f"ERROR: {error_msg}")
-                        raise Exception(error_msg)
+                        raise Exception("No se encontraron archivos para actualizar en el repositorio")
                     
                     print(f"Actualización completada: {files_updated} archivos actualizados")
                     
