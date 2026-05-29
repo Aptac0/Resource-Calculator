@@ -980,6 +980,22 @@ class ResourceExtractorApp:
 
     def _download_repo_resources(self):
         url = GITHUB_REPO_ZIP_URL
+        log_file = self._get_install_base() / 'UPDATE_DEBUG.log'
+        
+        def log(msg):
+            print(msg)
+            try:
+                with open(log_file, 'a', encoding='utf-8') as f:
+                    f.write(msg + '\n')
+            except:
+                pass
+        
+        # Limpiar log anterior
+        try:
+            log_file.write_text('=== INICIO ACTUALIZACIÓN ===\n', encoding='utf-8')
+        except:
+            pass
+        
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_zip = Path(tmpdir) / 'repo.zip'
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -1007,33 +1023,36 @@ class ResourceExtractorApp:
                                 self.root.after(0, lambda p=progress: self.update_btn.config(
                                     text=f"Actualizando... {p}%"
                                 ))
+                    
+                    log(f"[DESCARGA] Completada: {downloaded} bytes")
             except Exception as e:
+                log(f"[ERROR] Descargando: {e}")
                 raise Exception(f"Error descargando de GitHub: {e}")
             
             try:
                 with zipfile.ZipFile(tmp_zip, 'r') as zf:
                     all_files = zf.namelist()
-                    print(f"[DEBUG] Total archivos en ZIP: {len(all_files)}")
-                    print(f"[DEBUG] Primeros 20 archivos:")
+                    log(f"[DEBUG] Total archivos en ZIP: {len(all_files)}")
+                    log(f"[DEBUG] Primeros 20 archivos:")
                     for i, name in enumerate(all_files[:20]):
-                        print(f"  {i}: {name}")
+                        log(f"  {i}: {name}")
                     
                     root_prefix = None
                     for name in all_files:
                         if name.endswith('/'):
                             continue
                         root_prefix = name.split('/', 1)[0] + '/'
+                        log(f"[DEBUG] Detectado root_prefix: {root_prefix} (de archivo: {name})")
                         break
-                    
-                    print(f"[DEBUG] root_prefix detectado: {root_prefix}")
                     
                     if not root_prefix:
                         raise Exception('No se encontró el contenido del repositorio en el ZIP')
                     
                     install_dir = self._get_install_base()
-                    print(f"[DEBUG] install_dir: {install_dir}")
+                    log(f"[DEBUG] install_dir: {install_dir}")
                     files_updated = 0
                     
+                    log(f"[DEBUG] Iterando sobre archivos que coinciden con root_prefix: {root_prefix}")
                     for name in all_files:
                         if not name.startswith(root_prefix):
                             continue
@@ -1042,8 +1061,10 @@ class ResourceExtractorApp:
                         
                         # Saltar directorios vacíos
                         if not rel_path or name.endswith('/'):
+                            log(f"[SKIP] Directorio o vacío: {name}")
                             continue
                         
+                        log(f"[PROCESA] {rel_path}")
                         # Actualizar TODOS los archivos, no solo kingdoms e iconos
                         target = install_dir / rel_path
                         target.parent.mkdir(parents=True, exist_ok=True)
@@ -1052,24 +1073,27 @@ class ResourceExtractorApp:
                             with zf.open(name) as src, open(target, 'wb') as dst:
                                 dst.write(src.read())
                             files_updated += 1
-                            print(f"Actualizado: {rel_path}")
+                            log(f"[OK] Actualizado: {rel_path}")
                         except Exception as e:
-                            print(f"Advertencia: No se pudo actualizar {rel_path}: {e}")
+                            log(f"[WARN] No se pudo actualizar {rel_path}: {e}")
                     
-                    print(f"[DEBUG] Total archivos procesados: {files_updated}")
+                    log(f"[DEBUG] Total archivos procesados: {files_updated}")
                     
                     if files_updated == 0:
+                        log("[ERROR] NO SE ENCONTRARON ARCHIVOS PARA ACTUALIZAR")
                         raise Exception("No se encontraron archivos para actualizar en el repositorio")
                     
-                    print(f"Actualización completada: {files_updated} archivos actualizados")
+                    log(f"[ÉXITO] Actualización completada: {files_updated} archivos")
                     
             except zipfile.BadZipFile:
+                log("[ERROR] BadZipFile - El archivo no es un ZIP válido")
                 raise Exception("El archivo descargado no es un ZIP válido")
             except Exception as e:
                 error_str = str(e)
-                print(f"ERROR EN EXTRACCIÓN: {error_str}")
+                log(f"[ERROR] En extracción: {error_str}")
                 raise Exception(f"Error extrayendo archivos: {error_str}")
         
+        log("[FINAL] _download_repo_resources completado exitosamente")
         return True
 
     def _process_thread(self, tipo):
