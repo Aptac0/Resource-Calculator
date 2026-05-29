@@ -1012,20 +1012,29 @@ class ResourceExtractorApp:
             
             try:
                 with zipfile.ZipFile(tmp_zip, 'r') as zf:
+                    all_files = zf.namelist()
+                    print(f"[DEBUG] Total archivos en ZIP: {len(all_files)}")
+                    print(f"[DEBUG] Primeros 20 archivos:")
+                    for i, name in enumerate(all_files[:20]):
+                        print(f"  {i}: {name}")
+                    
                     root_prefix = None
-                    for name in zf.namelist():
+                    for name in all_files:
                         if name.endswith('/'):
                             continue
                         root_prefix = name.split('/', 1)[0] + '/'
                         break
                     
+                    print(f"[DEBUG] root_prefix detectado: {root_prefix}")
+                    
                     if not root_prefix:
                         raise Exception('No se encontró el contenido del repositorio en el ZIP')
                     
                     install_dir = self._get_install_base()
+                    print(f"[DEBUG] install_dir: {install_dir}")
                     files_updated = 0
                     
-                    for name in zf.namelist():
+                    for name in all_files:
                         if not name.startswith(root_prefix):
                             continue
                         
@@ -1046,6 +1055,8 @@ class ResourceExtractorApp:
                             print(f"Actualizado: {rel_path}")
                         except Exception as e:
                             print(f"Advertencia: No se pudo actualizar {rel_path}: {e}")
+                    
+                    print(f"[DEBUG] Total archivos procesados: {files_updated}")
                     
                     if files_updated == 0:
                         raise Exception("No se encontraron archivos para actualizar en el repositorio")
