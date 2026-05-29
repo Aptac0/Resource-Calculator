@@ -1053,7 +1053,9 @@ class ResourceExtractorApp:
                     if files_updated == 0:
                         # Debug: mostrar qué archivos hay en el ZIP
                         available_dirs = set()
+                        all_files = []
                         for name in zf.namelist():
+                            all_files.append(name)
                             if not name.startswith(root_prefix):
                                 continue
                             rel = name[len(root_prefix):]
@@ -1061,15 +1063,26 @@ class ResourceExtractorApp:
                             if len(parts) > 1:
                                 available_dirs.add(parts[0].lower())
                         
+                        # Imprimir debug info a consola
+                        print(f"ROOT PREFIX: {root_prefix}")
+                        print(f"PRIMEROS 20 ARCHIVOS DEL ZIP:")
+                        for f in all_files[:20]:
+                            print(f"  {f}")
+                        print(f"DIRECTORIOS ENCONTRADOS: {sorted(available_dirs) if available_dirs else 'ninguno'}")
+                        
                         dirs_msg = ", ".join(sorted(available_dirs)) if available_dirs else "ninguno"
-                        raise Exception(f"No se encontraron archivos en kingdoms/ o iconos/. Directorios encontrados: {dirs_msg}")
+                        error_msg = f"No se encontraron archivos en kingdoms/ o iconos/.\nDirectorios encontrados: {dirs_msg}"
+                        print(f"ERROR: {error_msg}")
+                        raise Exception(error_msg)
                     
                     print(f"Actualización completada: {files_updated} archivos actualizados")
                     
             except zipfile.BadZipFile:
                 raise Exception("El archivo descargado no es un ZIP válido")
             except Exception as e:
-                raise Exception(f"Error extrayendo archivos: {e}")
+                error_str = str(e)
+                print(f"ERROR EN EXTRACCIÓN: {error_str}")
+                raise Exception(f"Error extrayendo archivos: {error_str}")
         
         return True
 
