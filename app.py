@@ -1031,8 +1031,9 @@ class ResourceExtractorApp:
                         
                         rel_path = name[len(root_prefix):]
                         
-                        # Actualizar solo folders de interés
-                        if rel_path.startswith('kingdoms/') or rel_path.startswith('Iconos/'):
+                        # Actualizar solo folders de interés (case-insensitive)
+                        rel_path_lower = rel_path.lower()
+                        if rel_path_lower.startswith('kingdoms/') or rel_path_lower.startswith('iconos/'):
                             target = install_dir / rel_path
                             
                             if name.endswith('/'):
@@ -1045,11 +1046,23 @@ class ResourceExtractorApp:
                                 with zf.open(name) as src, open(target, 'wb') as dst:
                                     dst.write(src.read())
                                 files_updated += 1
+                                print(f"Actualizado: {rel_path}")
                             except Exception as e:
                                 print(f"Advertencia: No se pudo actualizar {rel_path}: {e}")
                     
                     if files_updated == 0:
-                        raise Exception("No se encontraron archivos para actualizar")
+                        # Debug: mostrar qué archivos hay en el ZIP
+                        available_dirs = set()
+                        for name in zf.namelist():
+                            if not name.startswith(root_prefix):
+                                continue
+                            rel = name[len(root_prefix):]
+                            parts = rel.split('/')
+                            if len(parts) > 1:
+                                available_dirs.add(parts[0].lower())
+                        
+                        dirs_msg = ", ".join(sorted(available_dirs)) if available_dirs else "ninguno"
+                        raise Exception(f"No se encontraron archivos en kingdoms/ o iconos/. Directorios encontrados: {dirs_msg}")
                     
                     print(f"Actualización completada: {files_updated} archivos actualizados")
                     
