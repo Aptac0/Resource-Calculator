@@ -24,7 +24,7 @@ TESSERACT_CMD = None
 if TESSERACT_CMD:
     pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
 
-GITHUB_OWNER = "Aptac00"
+GITHUB_OWNER = "Aptac0"
 GITHUB_REPO = "Resource-Calculator"
 GITHUB_BRANCH = "main"
 GITHUB_REPO_ZIP_URL = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/archive/refs/heads/{GITHUB_BRANCH}.zip"
@@ -899,16 +899,15 @@ class ResourceExtractorApp:
         threading.Thread(target=self._update_from_github_thread, daemon=True).start()
 
     def _update_from_github_thread(self):
-        self.root.after(0, lambda: self.update_btn.config(state=tk.DISABLED))
+        self.root.after(0, lambda: self.update_btn.config(state=tk.DISABLED, text="Descargando..."))
         try:
-            self.root.after(0, lambda: messagebox.showinfo("Actualizando", "Descargando actualizaciones de GitHub..."))
             self._download_repo_resources()
             self.root.after(0, lambda: self._populate_reinos())
             self.root.after(0, lambda: messagebox.showinfo("Actualización completa", "Los reinos y recursos se han sincronizado con GitHub."))
         except Exception as e:
             self.root.after(0, lambda: messagebox.showerror("Error", f"No se pudo actualizar desde GitHub: {e}"))
         finally:
-            self.root.after(0, lambda: self.update_btn.config(state=tk.NORMAL))
+            self.root.after(0, lambda: self.update_btn.config(state=tk.NORMAL, text="Actualizar GitHub"))
 
     def _download_repo_resources(self):
         url = GITHUB_REPO_ZIP_URL
