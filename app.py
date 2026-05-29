@@ -17,6 +17,7 @@ import urllib.parse
 import zipfile
 import tempfile
 import webbrowser
+from translations import get_translator, set_language, _
 
 # Si Tesseract no está en la ruta del sistema, pon aquí la ruta correcta:
 # TESSERACT_CMD = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
@@ -36,7 +37,7 @@ APP_VERSION = "1.0.0"
 class ResourceExtractorApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Extractor de recursos")
+        self.root.title(_('title'))
         self.root.state('zoomed')  # Pantalla completa en Windows
         self.root.configure(bg="#1a3a4a")
         
@@ -47,6 +48,10 @@ class ResourceExtractorApp:
         # Variables para niveles (1..25)
         self.city_level_var = tk.StringVar(value='1')
         self.warehouse_level_var = tk.StringVar(value='1')
+        # Variable para idioma
+        self.language_var = tk.StringVar(value='es')
+        # Diccionario para guardar referencias de labels traducibles
+        self.labels_dict = {}
         # Cargar icono de la ventana
         self._load_window_icon()
         
@@ -121,15 +126,40 @@ class ResourceExtractorApp:
         style.configure('Accent.TButton', background='#6f42c1', foreground='white')
         style.configure('Danger.TButton', background='#d9534f', foreground='white')
         style.configure('Default.TButton', background='#4da6c7', foreground='white')
-        style.configure('Title.TLabel', font=('Arial', 14, 'bold'), background="#1a3a4a", foreground="#87ceeb")
-        style.configure('Section.TLabel', font=('Arial', 12, 'bold'), background="#1f5670", foreground="#e6f7ff")
-        style.configure('Label.TLabel', font=('Arial', 10, 'bold'), background="#1f5670", foreground="#e6f7ff")
-        style.configure('Help.TLabel', font=('Arial', 9), background="#1a3a4a", foreground="#dcdcdc")
-        style.configure('TEntry', fieldbackground='#2e4d62', foreground='white', background='#2e4d62')
-        style.configure('TCombobox', fieldbackground='#2e4d62', foreground='white', background='#2e4d62')
+        style.configure('Title.TLabel', font=('Arial', 14, 'bold'), background="#1a3a4a", foreground="#00d9ff")
+        style.configure('Section.TLabel', font=('Arial', 12, 'bold'), background="#1f5670", foreground="#00ff41")
+        style.configure('Label.TLabel', font=('Arial', 10, 'bold'), background="#1f5670", foreground="#00d9ff")
+        style.configure('Help.TLabel', font=('Arial', 9, 'bold'), background="#1a3a4a", foreground="#ffffff")
+        style.configure('TEntry', fieldbackground='#ffffff', foreground='#000000', background='#ffffff', font=('Arial', 10, 'bold'))
+        style.configure('TCombobox', fieldbackground='#ffffff', foreground='#000000', background='#ffffff', font=('Arial', 10, 'bold'))
         
     def create_widgets(self):
-        title = ttk.Label(self.root, text="CALCULADORA DE RECURSOS", style='Title.TLabel')
+        # Barra de idiomas en la parte superior
+        lang_frame = tk.Frame(self.root, bg="#0d2633")
+        lang_frame.pack(fill=tk.X, padx=0, pady=0)
+        
+        ttk.Label(lang_frame, text=_('language'), style='Help.TLabel').pack(side=tk.LEFT, padx=12, pady=8)
+        
+        translator = get_translator()
+        lang_names = translator.get_language_names()
+        lang_codes = list(lang_names.keys())
+        lang_display = [lang_names[code] for code in lang_codes]
+        
+        lang_combo = ttk.Combobox(lang_frame, values=lang_display, state='readonly', width=15, style='TCombobox')
+        lang_combo.set(lang_names['es'])
+        lang_combo.pack(side=tk.LEFT, padx=0, pady=8)
+        
+        def on_language_change(event):
+            selected_idx = lang_combo.current()
+            if selected_idx >= 0:
+                new_lang = lang_codes[selected_idx]
+                self.language_var.set(new_lang)
+                set_language(new_lang)
+                self._refresh_all_texts()
+        
+        lang_combo.bind('<<ComboboxSelected>>', on_language_change)
+        
+        title = ttk.Label(self.root, text=_('title'), style='Title.TLabel')
         title.pack(pady=14)
 
         main_frame = tk.Frame(self.root, bg="#1a3a4a")
@@ -149,8 +179,9 @@ class ResourceExtractorApp:
         selector_frame = tk.Frame(left_panel, bg="#1f5670", bd=0, relief=tk.RIDGE)
         selector_frame.pack(fill=tk.BOTH, expand=True, pady=(0,8))
 
-        selector_label = ttk.Label(selector_frame, text="Selector de Imágenes", style='Section.TLabel')
-        selector_label.pack(pady=10)
+        self.selector_label = ttk.Label(selector_frame, text=_('selector_images'), style='Section.TLabel')
+        self.selector_label.pack(pady=10)
+        self.labels_dict['selector_label'] = ('selector_images', self.selector_label)
 
         listbox_frame = tk.Frame(selector_frame, bg="#1f5670")
         listbox_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0,10))
@@ -164,19 +195,30 @@ class ResourceExtractorApp:
 
         button_frame = tk.Frame(selector_frame, bg="#1f5670")
         button_frame.pack(fill=tk.X, padx=12, pady=(0,12))
-        self._add_side_button(button_frame, "Agregar Imágenes", self.add_images, "#4da6c7", 'agregar').pack(side=tk.LEFT, padx=3, pady=4, expand=True, fill=tk.X)
-        self._add_side_button(button_frame, "Limpiar Lista", self.clear_images, "#d9534f", 'eliminar').pack(side=tk.LEFT, padx=3, pady=4, expand=True, fill=tk.X)
-        self._add_side_button(button_frame, "Nueva ventana", self.open_new_window, "#28a745", 'ventana').pack(side=tk.LEFT, padx=3, pady=4, expand=True, fill=tk.X)
+        self.add_images_btn = self._add_side_button(button_frame, _('add_images'), self.add_images, "#4da6c7", 'agregar')
+        self.add_images_btn.pack(side=tk.LEFT, padx=3, pady=4, expand=True, fill=tk.X)
+        self.labels_dict['add_images_btn'] = ('add_images', self.add_images_btn)
+        
+        self.clear_list_btn = self._add_side_button(button_frame, _('clear_list'), self.clear_images, "#d9534f", 'eliminar')
+        self.clear_list_btn.pack(side=tk.LEFT, padx=3, pady=4, expand=True, fill=tk.X)
+        self.labels_dict['clear_list_btn'] = ('clear_list', self.clear_list_btn)
+        
+        self.new_window_btn = self._add_side_button(button_frame, _('new_window'), self.open_new_window, "#28a745", 'ventana')
+        self.new_window_btn.pack(side=tk.LEFT, padx=3, pady=4, expand=True, fill=tk.X)
+        self.labels_dict['new_window_btn'] = ('new_window', self.new_window_btn)
 
         options_frame = tk.Frame(right_panel, bg="#1f5670", bd=0, relief=tk.RIDGE)
         options_frame.pack(fill=tk.BOTH, expand=True, pady=(0,8))
 
-        options_label = ttk.Label(options_frame, text="Configuración de Reino", style='Section.TLabel')
-        options_label.pack(pady=8)
+        self.options_label = ttk.Label(options_frame, text=_('config_kingdom'), style='Section.TLabel')
+        self.options_label.pack(pady=8)
+        self.labels_dict['options_label'] = ('config_kingdom', self.options_label)
 
         reino_frame = tk.Frame(options_frame, bg="#1f5670")
         reino_frame.pack(fill=tk.X, padx=12, pady=(0,8))
-        ttk.Label(reino_frame, text="Reino:", style='Label.TLabel').grid(row=0, column=0, sticky='w')
+        self.reino_label = ttk.Label(reino_frame, text=_('kingdom'), style='Label.TLabel')
+        self.reino_label.grid(row=0, column=0, sticky='w')
+        self.labels_dict['reino_label'] = ('kingdom', self.reino_label)
         self.reino_combobox = ttk.Combobox(reino_frame, values=[], state='readonly', width=22, style='TCombobox')
         self.reino_combobox.grid(row=0, column=1, padx=8, pady=3, sticky='ew')
         reino_frame.columnconfigure(1, weight=1)
@@ -185,10 +227,14 @@ class ResourceExtractorApp:
 
         range_frame = tk.Frame(options_frame, bg="#1f5670")
         range_frame.pack(fill=tk.X, padx=12, pady=(0,8))
-        ttk.Label(range_frame, text="Número de inicio:", style='Label.TLabel').grid(row=0, column=0, sticky='w')
+        self.start_label = ttk.Label(range_frame, text=_('start_number'), style='Label.TLabel')
+        self.start_label.grid(row=0, column=0, sticky='w')
+        self.labels_dict['start_label'] = ('start_number', self.start_label)
         self.start_entry = ttk.Entry(range_frame, width=10, style='TEntry')
         self.start_entry.grid(row=0, column=1, padx=6, pady=3, sticky='ew')
-        ttk.Label(range_frame, text="Número de fin:", style='Label.TLabel').grid(row=0, column=2, sticky='w', padx=(12,0))
+        self.end_label = ttk.Label(range_frame, text=_('end_number'), style='Label.TLabel')
+        self.end_label.grid(row=0, column=2, sticky='w', padx=(12,0))
+        self.labels_dict['end_label'] = ('end_number', self.end_label)
         self.end_entry = ttk.Entry(range_frame, width=10, style='TEntry')
         self.end_entry.grid(row=0, column=3, padx=6, pady=3, sticky='ew')
         range_frame.columnconfigure(1, weight=1)
@@ -196,7 +242,9 @@ class ResourceExtractorApp:
 
         blocked_frame = tk.Frame(options_frame, bg="#1f5670")
         blocked_frame.pack(fill=tk.X, padx=12, pady=(0,8))
-        ttk.Label(blocked_frame, text="Números bloqueados:", style='Label.TLabel').grid(row=0, column=0, sticky='w')
+        self.blocked_label = ttk.Label(blocked_frame, text=_('blocked_numbers'), style='Label.TLabel')
+        self.blocked_label.grid(row=0, column=0, sticky='w')
+        self.labels_dict['blocked_label'] = ('blocked_numbers', self.blocked_label)
         self.blocked_entry = ttk.Entry(blocked_frame, width=28, style='TEntry')
         self.blocked_entry.grid(row=0, column=1, padx=6, pady=3, sticky='ew')
         blocked_frame.columnconfigure(1, weight=1)
@@ -204,10 +252,14 @@ class ResourceExtractorApp:
         # Niveles: Ciudad y Depósito (1-25)
         levels_frame = tk.Frame(options_frame, bg="#1f5670")
         levels_frame.pack(fill=tk.X, padx=12, pady=(0,8))
-        ttk.Label(levels_frame, text="Nivel de Puesto Venta:", style='Label.TLabel').grid(row=0, column=0, sticky='w')
+        self.city_level_label = ttk.Label(levels_frame, text=_('city_level'), style='Label.TLabel')
+        self.city_level_label.grid(row=0, column=0, sticky='w')
+        self.labels_dict['city_level_label'] = ('city_level', self.city_level_label)
         self.city_level_cb = ttk.Combobox(levels_frame, values=[str(i) for i in range(1,26)], state='readonly', width=6, textvariable=self.city_level_var, style='TCombobox')
         self.city_level_cb.grid(row=0, column=1, padx=6, pady=3, sticky='w')
-        ttk.Label(levels_frame, text="Nivel de depósito:", style='Label.TLabel').grid(row=0, column=2, sticky='w', padx=(12,0))
+        self.warehouse_level_label = ttk.Label(levels_frame, text=_('warehouse_level'), style='Label.TLabel')
+        self.warehouse_level_label.grid(row=0, column=2, sticky='w', padx=(12,0))
+        self.labels_dict['warehouse_level_label'] = ('warehouse_level', self.warehouse_level_label)
         self.warehouse_level_cb = ttk.Combobox(levels_frame, values=[str(i) for i in range(1,26)], state='readonly', width=6, textvariable=self.warehouse_level_var, style='TCombobox')
         self.warehouse_level_cb.grid(row=0, column=3, padx=6, pady=3, sticky='w')
         levels_frame.columnconfigure(1, weight=1)
@@ -215,27 +267,44 @@ class ResourceExtractorApp:
 
         action_frame = tk.Frame(options_frame, bg="#1f5670")
         action_frame.pack(fill=tk.X, padx=12, pady=(8,0))
-        self.recursos_totales_btn = self._add_side_button(action_frame, "Recursos Totales", lambda: self.process_resources('totales'), "#5cb85c", 'totales')
+        self.recursos_totales_btn = self._add_side_button(action_frame, _('total_resources'), lambda: self.process_resources('totales'), "#5cb85c", 'totales')
         self.recursos_totales_btn.pack(side=tk.LEFT, padx=3, pady=6, expand=True, fill=tk.X)
-        self.recursos_cuenta_btn = self._add_side_button(action_frame, "Recursos de Cuenta", lambda: self.process_resources('cuenta'), "#0275d8", 'cuenta')
+        self.recursos_cuenta_btn = self._add_side_button(action_frame, _('account_resources'), lambda: self.process_resources('cuenta'), "#0275d8", 'cuenta')
         self.recursos_cuenta_btn.pack(side=tk.LEFT, padx=3, pady=6, expand=True, fill=tk.X)
-        self.backpack_btn = self._add_side_button(action_frame, "Recursos de Mochila", lambda: self.process_resources('backpack'), "#9b59b6", 'mochila')
+        self.backpack_btn = self._add_side_button(action_frame, _('backpack_resources'), lambda: self.process_resources('backpack'), "#9b59b6", 'mochila')
         self.backpack_btn.pack(side=tk.LEFT, padx=3, pady=6, expand=True, fill=tk.X)
 
         update_frame = tk.Frame(options_frame, bg="#1f5670")
         update_frame.pack(fill=tk.X, padx=12, pady=(8,0))
-        self.update_btn = self._add_side_button(update_frame, "Actualizar GitHub", self.update_from_github, "#f0ad4e")
+        self.update_btn = self._add_side_button(update_frame, _('update_github'), self.update_from_github, "#f0ad4e")
         self.update_btn.pack(side=tk.LEFT, padx=3, pady=6, expand=True, fill=tk.X)
 
         progress_frame = tk.Frame(main_frame, bg="#15374a")
         progress_frame.grid(row=1, column=0, columnspan=2, sticky='ew', padx=12, pady=(8,0), ipadx=20)
         progress_inner = tk.Frame(progress_frame, bg="#1f5670")
         progress_inner.pack(fill=tk.X, padx=12, pady=12)
-        ttk.Label(progress_inner, text="Progreso de Procesamiento:", style='Label.TLabel').pack(anchor='center', pady=(0,8))
+        self.processing_progress_label = ttk.Label(progress_inner, text=_('processing_progress'), style='Label.TLabel')
+        self.processing_progress_label.pack(anchor='center', pady=(0,8))
+        self.labels_dict['processing_progress_label'] = ('processing_progress', self.processing_progress_label)
         self.progress_bar = ttk.Progressbar(progress_inner, mode='determinate')
         self.progress_bar.pack(fill=tk.X, pady=6)
         self.progress_label = ttk.Label(progress_inner, text="0%", style='Label.TLabel')
         self.progress_label.pack(anchor='center')
+
+    def _refresh_all_texts(self):
+        """Actualiza todos los textos de la interfaz al cambiar de idioma"""
+        self.root.title(_('title'))
+        
+        # Actualizar etiquetas de botones
+        self.recursos_totales_btn.config(text=_('total_resources'))
+        self.recursos_cuenta_btn.config(text=_('account_resources'))
+        self.backpack_btn.config(text=_('backpack_resources'))
+        self.update_btn.config(text=_('update_github'))
+        
+        # Actualizar todos los labels guardados en labels_dict
+        for key, (translation_key, label_widget) in self.labels_dict.items():
+            label_widget.config(text=_(translation_key))
+        # pero aquí refrescamos dinámicamente elementos que ya fueron creados
 
     def _add_side_button(self, parent, text, command, color, icon_key=None):
         icon = self.icons.get(icon_key) if icon_key else None
@@ -246,15 +315,15 @@ class ResourceExtractorApp:
         return btn
         
     def add_images(self):
-        filetypes = [("Image files", "*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tiff"), ("All files", "*.*")]
-        files = filedialog.askopenfilenames(filetypes=filetypes, title="Selecciona imágenes")
+        filetypes = [(_('image_files'), "*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tiff"), (_('all_files'), "*.*")]
+        files = filedialog.askopenfilenames(filetypes=filetypes, title=_('select_images_title'))
         if files:
             for file in files:
                 if len(self.selected_images) < 100:
                     self.selected_images.append(file)
                     self.image_listbox.insert(tk.END, Path(file).name)
             if len(self.selected_images) >= 100:
-                messagebox.showwarning("Límite alcanzado", "Se ha alcanzado el máximo de 100 imágenes")
+                messagebox.showwarning(_('no_processable_data_title'), _('limit_reached'))
     
     def clear_images(self):
         self.selected_images.clear()
@@ -343,22 +412,22 @@ class ResourceExtractorApp:
 
         if start_text or end_text:
             if not start_text or not end_text:
-                raise ValueError('Debe completar número de inicio y número de fin.')
+                raise ValueError(_('select_start_end'))
             start_num = self._parse_numeric_value(start_text)
             end_num = self._parse_numeric_value(end_text)
             if start_num is None or end_num is None:
-                raise ValueError('Los campos de inicio y fin deben contener solo números.')
+                raise ValueError(_('only_numbers'))
             if end_num < start_num:
-                raise ValueError('El número de fin debe ser mayor o igual al número de inicio.')
+                raise ValueError(_('end_greater_start'))
             blocked = self._parse_blocked_numbers(blocked_text)
             if blocked is None:
-                raise ValueError('El campo de bloqueados no tiene el formato correcto.')
+                raise ValueError(_('blocked_format'))
             width = max(len(start_text), len(end_text), tpl.get('index_width', 3))
             prefix = tpl.get('prefix') or tpl.get('nickname_line') or 'NIC'
             all_numbers = list(range(start_num, end_num + 1))
             final_numbers = [n for n in all_numbers if n not in blocked]
             if len(final_numbers) != expected_count:
-                raise ValueError(f'Error: {expected_count} imágenes seleccionadas pero hay {len(final_numbers)} cuentas válidas.')
+                raise ValueError(_('images_mismatch', count=expected_count, valid=len(final_numbers)))
             return [f"{prefix}{str(n).zfill(width)}" for n in final_numbers]
 
         blocked = set(tpl.get('blocked', []))
@@ -520,7 +589,7 @@ class ResourceExtractorApp:
     def preview_selected_image(self):
         sel = self.image_listbox.curselection()
         if not sel:
-            messagebox.showinfo("Selecciona", "Selecciona una imagen en la lista para previsualizar")
+            messagebox.showinfo("Info", _('select_image'))
             return
         idx = sel[0]
         image_path = self.selected_images[idx]
@@ -599,7 +668,7 @@ class ResourceExtractorApp:
     def show_ocr_values(self):
         sel = self.image_listbox.curselection()
         if not sel:
-            messagebox.showinfo("Selecciona", "Selecciona una imagen en la lista para ver valores OCR")
+            messagebox.showinfo("Info", _('select_image_ocr'))
             return
         idx = sel[0]
         image_path = self.selected_images[idx]
@@ -652,19 +721,19 @@ class ResourceExtractorApp:
         close_btn.pack(side=tk.LEFT, padx=6)
 
     def _save_text(self, text):
-        fp = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text files","*.txt"), ("All files","*.*")], title="Guardar OCR raw")
+        fp = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[(_('text_files'),"*.txt"), (_('all_files'),"*.*")], title=_('save_ocr_raw'))
         if not fp:
             return
         try:
             with open(fp, 'w', encoding='utf-8') as f:
                 f.write(text)
-            messagebox.showinfo("Guardado", f"Archivo guardado:\n{fp}")
+            messagebox.showinfo(_('success'), _('save_success', path=fp))
         except Exception as e:
-            messagebox.showerror("Error", f"No se pudo guardar el archivo: {e}")
+            messagebox.showerror("Error", _('save_error', error=str(e)))
 
     def _show_annotated_window(self, annotated_img, image_path, result):
         win = tk.Toplevel(self.root)
-        win.title(f"OCR Preview - {Path(image_path).name}")
+        win.title(f"{_('ocr_preview_title')} - {Path(image_path).name}")
         # escala si es muy grande
         screen_w = win.winfo_screenwidth()
         screen_h = win.winfo_screenheight()
@@ -683,10 +752,10 @@ class ResourceExtractorApp:
 
         info_frame = tk.Frame(win)
         info_frame.pack(fill=tk.X, pady=6)
-        save_btn = tk.Button(info_frame, text="Guardar imagen anotada", command=lambda: self._save_annotated(annotated_img),
+        save_btn = tk.Button(info_frame, text=_('save_annotated'), command=lambda: self._save_annotated(annotated_img),
                              bg="#5bc0de", fg="white")
         save_btn.pack(side=tk.LEFT, padx=6)
-        close_btn = tk.Button(info_frame, text="Cerrar", command=win.destroy)
+        close_btn = tk.Button(info_frame, text=_('close'), command=win.destroy)
         close_btn.pack(side=tk.LEFT, padx=6)
 
         # texto con los pares seleccionados (si existen)
@@ -696,17 +765,17 @@ class ResourceExtractorApp:
             for pair in result:
                 tk.Label(win, text=str(pair), anchor='w').pack(fill=tk.X, padx=8)
         else:
-            tk.Label(win, text="No se detectaron correctamente los 4 valores en esta imagen (se muestra OCR raw).", fg='red').pack(fill=tk.X, padx=8)
+            tk.Label(win, text=_('no_correct_detection'), fg='red').pack(fill=tk.X, padx=8)
 
     def _save_annotated(self, pil_img):
-        fp = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[("PNG image", "*.png")], title="Guardar imagen anotada")
+        fp = filedialog.asksaveasfilename(defaultextension=".png", filetypes=[(_('png_image'), "*.png")], title=_('save_annotated'))
         if not fp:
             return
         try:
             pil_img.save(fp)
-            messagebox.showinfo("Guardado", f"Imagen anotada guardada en:\n{fp}")
+            messagebox.showinfo(_('success'), _('save_success', path=fp))
         except Exception as e:
-            messagebox.showerror("Error", f"No se pudo guardar la imagen: {e}")
+            messagebox.showerror("Error", _('save_error', error=str(e)))
 
     def _get_default_save_dir(self):
         # Guardar en la carpeta de instalación/exe cuando sea un .exe, o en el directorio del script en modo desarrollo.
@@ -720,10 +789,10 @@ class ResourceExtractorApp:
         initial_path = default_dir / default_filename
         fp = filedialog.asksaveasfilename(
             defaultextension=".txt",
-            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+            filetypes=[(_('text_files'), "*.txt"), (_('all_files'), "*.*")],
             initialdir=str(default_dir),
             initialfile=default_filename,
-            title="Guardar resultados de recursos"
+            title=_('save_results')
         )
         if not fp:
             fp = str(initial_path)
@@ -742,15 +811,15 @@ class ResourceExtractorApp:
                     f.write(f"Piedra: {int(e['Piedra']) if e.get('Piedra') is not None else 0}\n")
                     f.write(f"Oro: {int(e['Oro']) if e.get('Oro') is not None else 0}\n")
                     f.write("---\n")
-            msg = f"Datos guardados en:\n{fp}"
+            msg = _('save_success', path=fp)
             if self.failed_images:
-                msg += "\n\nPero hubo imágenes que no se pudieron leer:\n" + ", ".join(self.failed_images)
-            messagebox.showinfo("Éxito", msg)
+                msg += "\n\n" + _('failed_images', images=", ".join(self.failed_images))
+            messagebox.showinfo(_('success'), msg)
         except Exception as e:
-            messagebox.showerror("Error", f"No se pudo guardar el archivo: {e}")
+            messagebox.showerror("Error", _('save_error', error=str(e)))
 
     def load_kingdom_file(self):
-        fp = filedialog.askopenfilename(filetypes=[("Text files","*.txt"), ("All files","*.*")], title="Selecciona archivo de Reino")
+        fp = filedialog.askopenfilename(filetypes=[(_('text_files'),"*.txt"), (_('all_files'),"*.*")], title=_('select_kingdom'))
         if not fp:
             return
         self.kingdom_template_path = fp
@@ -873,7 +942,7 @@ class ResourceExtractorApp:
 
     def process_resources(self, tipo):
         if not self.selected_images:
-            messagebox.showerror("Error", "No hay imágenes seleccionadas")
+            messagebox.showerror("Error", _('no_images'))
             return
 
         self.recursos_totales_btn.config(state=tk.DISABLED)
@@ -891,10 +960,10 @@ class ResourceExtractorApp:
             script = str(Path(__file__).resolve())
             subprocess.Popen([python, script], cwd=str(base))
         except Exception as e:
-            messagebox.showerror("Error", f"No se pudo abrir nueva ventana: {e}")
+            messagebox.showerror("Error", _('cannot_open_window', error=str(e)))
 
     def update_from_github(self):
-        if not messagebox.askyesno("Actualizar", "¿Deseas obtener las ultimas actualizaciones desde GitHub?"):
+        if not messagebox.askyesno(_('update_confirm_title'), _('update_confirm')):
             return
         threading.Thread(target=self._update_from_github_thread, daemon=True).start()
 
@@ -903,11 +972,11 @@ class ResourceExtractorApp:
         try:
             self._download_repo_resources()
             self.root.after(0, lambda: self._populate_reinos())
-            self.root.after(0, lambda: messagebox.showinfo("Actualización completa", "Los reinos y recursos se han sincronizado con GitHub."))
+            self.root.after(0, lambda: messagebox.showinfo(_('update_complete_title'), _('update_complete')))
         except Exception as e:
-            self.root.after(0, lambda: messagebox.showerror("Error", f"No se pudo actualizar desde GitHub: {e}"))
+            self.root.after(0, lambda: messagebox.showerror("Error", _('update_error', error=str(e))))
         finally:
-            self.root.after(0, lambda: self.update_btn.config(state=tk.NORMAL, text="Actualizar GitHub"))
+            self.root.after(0, lambda: self.update_btn.config(state=tk.NORMAL, text=_('update_github')))
 
     def _download_repo_resources(self):
         url = GITHUB_REPO_ZIP_URL
@@ -1081,7 +1150,7 @@ class ResourceExtractorApp:
             time.sleep(0.25)
 
             if not getattr(self, 'output_entries', None):
-                self.root.after(0, lambda: messagebox.showwarning("Advertencia", "No se encontraron datos procesables en las imágenes"))
+                self.root.after(0, lambda: messagebox.showwarning(_('no_processable_data_title'), _('no_processable_data')))
             else:
                 try:
                     kname = 'results'
@@ -1094,10 +1163,10 @@ class ResourceExtractorApp:
                     default_filename = f"{kname}_results_{ts}.txt"
                     self.root.after(0, lambda default_filename=default_filename: self._save_results_file(default_filename))
                 except Exception as e:
-                    err_msg = f"No se pudo guardar el archivo: {e}"
+                    err_msg = _('save_error', error=str(e))
                     self.root.after(0, lambda err_msg=err_msg: messagebox.showerror("Error", err_msg))
         except Exception as e:
-            self.root.after(0, lambda: messagebox.showerror("Error", f"Error durante el procesamiento: {e}"))
+            self.root.after(0, lambda: messagebox.showerror("Error", _('processing_error', error=str(e))))
         finally:
             self.root.after(0, lambda: self.recursos_totales_btn.config(state=tk.NORMAL))
             self.root.after(0, lambda: self.recursos_cuenta_btn.config(state=tk.NORMAL))
