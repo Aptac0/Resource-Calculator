@@ -17,6 +17,16 @@ import urllib.parse
 import zipfile
 import tempfile
 import webbrowser
+import shutil
+
+# Importar traducciones con mejor manejo de errores
+try:
+    from translations import get_translator, set_language, _
+except ImportError as e:
+    print(f"ERROR: No se pudo importar translations.py: {e}")
+    print(f"Ruta de búsqueda: {sys.path}")
+    print(f"Directorio actual: {os.getcwd()}")
+    raise
 
 # Si Tesseract no está en la ruta del sistema, pon aquí la ruta correcta:
 # TESSERACT_CMD = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
@@ -47,6 +57,12 @@ class ResourceExtractorApp:
         # Variables para niveles (1..25)
         self.city_level_var = tk.StringVar(value='1')
         self.warehouse_level_var = tk.StringVar(value='1')
+        # Variable para idioma
+        self.language_var = tk.StringVar(value='es')
+        
+        # Aplicar actualizaciones pendientes (si existen)
+        self._apply_pending_updates()
+        
         # Cargar icono de la ventana
         self._load_window_icon()
         
@@ -57,6 +73,9 @@ class ResourceExtractorApp:
         self.setup_styles()
         self.create_widgets()
         
+        # Verificar actualizaciones en background
+        self._check_updates_on_startup()
+        
     def _get_data_base(self):
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
             return Path(sys._MEIPASS)
@@ -66,12 +85,126 @@ class ResourceExtractorApp:
         if getattr(sys, 'frozen', False):
             return Path(sys.executable).parent
         return Path(__file__).parent
+    
+    def _apply_pending_updates(self):
+        """Aplicar actualizaciones pendientes de reinicio anterior"""
+        try:
+            appdata = Path(os.environ.get('APPDATA', Path.home() / 'AppData' / 'Roaming'))
+            app_data_dir = appdata / 'RSS STORE APTAC'
+            pending_dir = app_data_dir / '_update_pending'
+        except Exception:
+            # Fallback: usar archivo temporal
+            pending_dir = Path(tempfile.gettempdir()) / 'rss_update_pending'
+        
+        if not pending_dir.exists():
+            print(f"DEBUG: No hay carpeta de actualizaciones pendientes en {pending_dir}")
+            return
+        
+        print(f"DEBUG: Encontrada carpeta de actualizaciones en {pending_dir}")
+        
+        try:
+            # Copiar archivos actualizados de _update_pending a app_data_dir
+            # (guardar en AppData, no en Program Files que requiere admin)
+            app_data_dir = Path(os.environ.get('APPDATA', Path.home() / 'AppData' / 'Roaming')) / 'RSS STORE APTAC'
+            app_data_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Primero, identificar qué carpetas/archivos vamos a actualizar
+            # Para hacer reemplazo COMPLETO: eliminar subcarpetas que vamos a actualizar
+            subdirs_to_update = set()
+            for src_file in pending_dir.rglob('*'):
+                if src_file.is_file():
+                    rel_path = src_file.relative_to(pending_dir)
+                    # Extraer la primera carpeta del path (ej: "kingdoms/4107.txt" -> "kingdoms")
+                    if len(rel_path.parts) > 1:
+                        top_dir = rel_path.parts[0]
+                        subdirs_to_update.add(top_dir)
+            
+            print(f"DEBUG: Carpetas a actualizar completamente: {subdirs_to_update}")
+            
+            # Eliminar las carpetas antiguas que vamos a reemplazar
+            for subdir in subdirs_to_update:
+                old_dir = app_data_dir / subdir
+                if old_dir.exists():
+                    try:
+                        shutil.rmtree(old_dir)
+                        print(f"DEBUG: Eliminada carpeta antigua: {subdir}")
+                    except Exception as e:
+                        print(f"ADVERTENCIA: No se pudo eliminar {subdir}: {e}")
+            
+            # Ahora copiar TODA la estructura nueva
+            files_copied = 0
+            dirs_created = {}
+            for src_file in pending_dir.rglob('*'):
+                if src_file.is_file():
+                    rel_path = src_file.relative_to(pending_dir)
+                    dst_file = app_data_dir / rel_path
+                    
+                    # No sobrescribir logs
+                    if dst_file.name in {'update_debug.log'}:
+                        continue
+                    
+                    # Crear directorio si no existe
+                    try:
+                        dst_file.parent.mkdir(parents=True, exist_ok=True)
+                    except Exception as e:
+                        print(f"ADVERTENCIA al crear directorio {dst_file.parent}: {e}")
+                    
+                    # Copiar archivo
+                    try:
+                        shutil.copy2(src_file, dst_file)
+                        # Rastrear que se copio
+                        top_dir = str(rel_path.parts[0]) if rel_path.parts else ''
+                        if top_dir not in dirs_created:
+                            dirs_created[top_dir] = 0
+                        dirs_created[top_dir] += 1
+                        files_copied += 1
+                        if top_dir == 'kingdoms':
+                            print(f"DEBUG: Archivo reino copiado: {rel_path}")
+                    except Exception as e:
+                        print(f"ADVERTENCIA al copiar {rel_path}: {e}")
+            
+            print(f"DEBUG: Se copiaron {files_copied} archivos totales")
+            print(f"DEBUG: Desglose por carpeta: {dirs_created}")
+            
+            # Validar que se copiaron los reinos
+            kingdoms_dir = app_data_dir / 'kingdoms'
+            if kingdoms_dir.exists():
+                reino_files = list(kingdoms_dir.glob('*.txt'))
+                print(f"DEBUG: Reinos en AppData despues de actualizar: {len(reino_files)} archivos")
+                for rf in reino_files:
+                    print(f"  - {rf.name}")
+            else:
+                print(f"ADVERTENCIA: No existe directorio kingdoms en {kingdoms_dir}")
+            
+            # Eliminar carpeta temporal de actualizaciones
+            try:
+                shutil.rmtree(pending_dir)
+                print(f"DEBUG: Actualizaciones aplicadas correctamente. Carpeta {pending_dir} eliminada.")
+            except Exception as e:
+                print(f"ADVERTENCIA al limpiar carpeta temporal: {e}")
+        except Exception as e:
+            print(f"ERROR aplicando actualizaciones pendientes: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _resolve_path(self, *parts):
+        # Primero intentar buscar en AppData (actualizaciones descargadas)
+        try:
+            appdata = Path(os.environ.get('APPDATA', Path.home() / 'AppData' / 'Roaming'))
+            app_data_dir = appdata / 'RSS STORE APTAC'
+            candidate = app_data_dir.joinpath(*parts)
+            if candidate.exists():
+                return candidate
+        except Exception:
+            pass
+        
+        # Luego en install_base
         install_base = self._get_install_base()
         candidate = install_base.joinpath(*parts)
         if candidate.exists():
             return candidate
+        
+        # Finalmente en data_base
         data_base = self._get_data_base()
         return data_base.joinpath(*parts)
 
@@ -112,6 +245,107 @@ class ResourceExtractorApp:
             else:
                 print(f"No encontrado: {icon_path}")
 
+    def _check_updates_on_startup(self):
+        """Verifica actualizaciones de versión en background al iniciar"""
+        thread = threading.Thread(target=self._check_version_thread, daemon=True)
+        thread.start()
+
+    def _check_version_thread(self):
+        """Ejecuta la verificación de versión en un hilo separado"""
+        try:
+            import json
+            
+            # Obtener versión más reciente de GitHub
+            api_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
+            req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0'})
+            
+            with urllib.request.urlopen(req, timeout=10) as response:
+                data = json.loads(response.read())
+                latest_version = data.get('tag_name', None)
+            
+            if not latest_version:
+                return
+            
+            # Comparar versiones (ej: "v1.0.0" vs "v1.0.1")
+            if latest_version > APP_VERSION:
+                print(f"Nueva versión disponible: {latest_version}")
+                # Mostrar notificación en GUI
+                self.root.after(100, lambda: self._show_update_available(latest_version))
+        except Exception as e:
+            print(f"Error verificando versión: {e}")
+
+    def _show_update_available(self, new_version):
+        """Muestra notificación de actualización disponible"""
+        msg = f"Nueva versión disponible: {new_version}\n\nTus archivos dinámicos (reinos, iconos) se actualizarán automáticamente.\n\n¿Deseas descargar la nueva versión del programa?"
+        if messagebox.askyesno("Actualización disponible", msg):
+            self._download_new_exe(new_version)
+
+    def _download_new_exe(self, version):
+        """Descarga el nuevo .exe en background"""
+        thread = threading.Thread(target=self._download_exe_thread, args=(version,), daemon=False)
+        thread.start()
+
+    def _download_exe_thread(self, version):
+        """Hilo para descargar y ejecutar actualización"""
+        try:
+            import json
+            import subprocess
+            
+            # Obtener datos de la release
+            api_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
+            req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0'})
+            
+            with urllib.request.urlopen(req, timeout=10) as response:
+                release_data = json.loads(response.read())
+            
+            # Encontrar el .exe en los assets
+            assets = release_data.get('assets', [])
+            exe_asset = next((a for a in assets if GITHUB_EXE_NAME in a.get('name', '')), None)
+            
+            if not exe_asset:
+                self.root.after(0, lambda: messagebox.showerror("Error", f"No se encontró {GITHUB_EXE_NAME} en la release"))
+                return
+            
+            download_url = exe_asset['browser_download_url']
+            
+            # Descargar a archivo temporal
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.exe') as tmp:
+                tmp_path = tmp.name
+            
+            print(f"Descargando desde: {download_url}")
+            req = urllib.request.Request(download_url, headers={'User-Agent': 'Mozilla/5.0'})
+            
+            # Mostrar progreso
+            self.root.after(0, lambda: messagebox.showinfo("Descargando", f"Descargando {version}...\n\nEsto puede tomar unos minutos."))
+            
+            with urllib.request.urlopen(req, timeout=120) as response:
+                with open(tmp_path, 'wb') as f:
+                    f.write(response.read())
+            
+            print(f"Descargado a: {tmp_path}")
+            
+            # Ejecutar el update_helper en background
+            exe_path = Path(sys.executable) if getattr(sys, 'frozen', False) else Path(__file__).parent / "app.exe"
+            helper_script = Path(__file__).parent / "update_helper.py"
+            
+            if getattr(sys, 'frozen', False):
+                # Si está compilado, ejecutar como comando directo
+                subprocess.Popen([
+                    sys.executable, 
+                    str(helper_script), 
+                    APP_VERSION, 
+                    str(exe_path)
+                ], creationflags=subprocess.CREATE_NEW_CONSOLE)
+                
+                # Cerrar la app actual
+                self.root.after(500, lambda: self.root.quit())
+            else:
+                self.root.after(0, lambda: messagebox.showinfo("Actualización", "Actualizaciones descargadas.\nPor favor reinicia la aplicación."))
+        
+        except Exception as e:
+            self.root.after(0, lambda: messagebox.showerror("Error", f"Error descargando actualización:\n{e}"))
+
     def setup_styles(self):
         style = ttk.Style()
         style.theme_use('clam')
@@ -129,8 +363,8 @@ class ResourceExtractorApp:
         style.configure('TCombobox', fieldbackground='#2e4d62', foreground='white', background='#2e4d62')
         
     def create_widgets(self):
-        title = ttk.Label(self.root, text="CALCULADORA DE RECURSOS", style='Title.TLabel')
-        title.pack(pady=14)
+        self.title_label = ttk.Label(self.root, text=_("title"), style='Title.TLabel')
+        self.title_label.pack(pady=14)
 
         main_frame = tk.Frame(self.root, bg="#1a3a4a")
         main_frame.pack(fill=tk.BOTH, expand=True, padx=16, pady=8)
@@ -149,8 +383,8 @@ class ResourceExtractorApp:
         selector_frame = tk.Frame(left_panel, bg="#1f5670", bd=0, relief=tk.RIDGE)
         selector_frame.pack(fill=tk.BOTH, expand=True, pady=(0,8))
 
-        selector_label = ttk.Label(selector_frame, text="Selector de Imágenes", style='Section.TLabel')
-        selector_label.pack(pady=10)
+        self.selector_label = ttk.Label(selector_frame, text=_("selector_images"), style='Section.TLabel')
+        self.selector_label.pack(pady=10)
 
         listbox_frame = tk.Frame(selector_frame, bg="#1f5670")
         listbox_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0,10))
@@ -164,19 +398,40 @@ class ResourceExtractorApp:
 
         button_frame = tk.Frame(selector_frame, bg="#1f5670")
         button_frame.pack(fill=tk.X, padx=12, pady=(0,12))
-        self._add_side_button(button_frame, "Agregar Imágenes", self.add_images, "#4da6c7", 'agregar').pack(side=tk.LEFT, padx=3, pady=4, expand=True, fill=tk.X)
-        self._add_side_button(button_frame, "Limpiar Lista", self.clear_images, "#d9534f", 'eliminar').pack(side=tk.LEFT, padx=3, pady=4, expand=True, fill=tk.X)
-        self._add_side_button(button_frame, "Nueva ventana", self.open_new_window, "#28a745", 'ventana').pack(side=tk.LEFT, padx=3, pady=4, expand=True, fill=tk.X)
+        self.add_images_btn = self._add_side_button(button_frame, _("add_images"), self.add_images, "#4da6c7", 'agregar')
+        self.add_images_btn.pack(side=tk.LEFT, padx=3, pady=4, expand=True, fill=tk.X)
+        self.clear_list_btn = self._add_side_button(button_frame, _("clear_list"), self.clear_images, "#d9534f", 'eliminar')
+        self.clear_list_btn.pack(side=tk.LEFT, padx=3, pady=4, expand=True, fill=tk.X)
+        self.new_window_btn = self._add_side_button(button_frame, _("new_window"), self.open_new_window, "#28a745", 'ventana')
+        self.new_window_btn.pack(side=tk.LEFT, padx=3, pady=4, expand=True, fill=tk.X)
 
         options_frame = tk.Frame(right_panel, bg="#1f5670", bd=0, relief=tk.RIDGE)
         options_frame.pack(fill=tk.BOTH, expand=True, pady=(0,8))
 
-        options_label = ttk.Label(options_frame, text="Configuración de Reino", style='Section.TLabel')
-        options_label.pack(pady=8)
+        self.options_label = ttk.Label(options_frame, text=_("config_kingdom"), style='Section.TLabel')
+        self.options_label.pack(pady=8)
+
+        # Selector de idioma
+        language_frame = tk.Frame(options_frame, bg="#1f5670")
+        language_frame.pack(fill=tk.X, padx=12, pady=(0,8))
+        self.language_label = ttk.Label(language_frame, text=_("language"), style='Label.TLabel')
+        self.language_label.grid(row=0, column=0, sticky='w')
+        translator = get_translator()
+        lang_names = translator.get_language_names()
+        lang_codes = list(lang_names.keys())
+        lang_displays = [lang_names[code] for code in lang_codes]
+        self.language_cb = ttk.Combobox(language_frame, values=lang_displays, state='readonly', width=20, textvariable=self.language_var, style='TCombobox')
+        # Mapear nombres de idioma a códigos
+        self.lang_code_map = {lang_names[code]: code for code in lang_codes}
+        self.language_cb.grid(row=0, column=1, padx=8, pady=3, sticky='ew')
+        language_frame.columnconfigure(1, weight=1)
+        self.language_cb.set(lang_names['es'])  # Seleccionar español por defecto
+        self.language_cb.bind('<<ComboboxSelected>>', lambda e: self._on_language_selected())
 
         reino_frame = tk.Frame(options_frame, bg="#1f5670")
         reino_frame.pack(fill=tk.X, padx=12, pady=(0,8))
-        ttk.Label(reino_frame, text="Reino:", style='Label.TLabel').grid(row=0, column=0, sticky='w')
+        self.reino_label = ttk.Label(reino_frame, text=_("kingdom"), style='Label.TLabel')
+        self.reino_label.grid(row=0, column=0, sticky='w')
         self.reino_combobox = ttk.Combobox(reino_frame, values=[], state='readonly', width=22, style='TCombobox')
         self.reino_combobox.grid(row=0, column=1, padx=8, pady=3, sticky='ew')
         reino_frame.columnconfigure(1, weight=1)
@@ -185,10 +440,12 @@ class ResourceExtractorApp:
 
         range_frame = tk.Frame(options_frame, bg="#1f5670")
         range_frame.pack(fill=tk.X, padx=12, pady=(0,8))
-        ttk.Label(range_frame, text="Número de inicio:", style='Label.TLabel').grid(row=0, column=0, sticky='w')
+        self.start_label = ttk.Label(range_frame, text=_("start_number"), style='Label.TLabel')
+        self.start_label.grid(row=0, column=0, sticky='w')
         self.start_entry = ttk.Entry(range_frame, width=10, style='TEntry')
         self.start_entry.grid(row=0, column=1, padx=6, pady=3, sticky='ew')
-        ttk.Label(range_frame, text="Número de fin:", style='Label.TLabel').grid(row=0, column=2, sticky='w', padx=(12,0))
+        self.end_label = ttk.Label(range_frame, text=_("end_number"), style='Label.TLabel')
+        self.end_label.grid(row=0, column=2, sticky='w', padx=(12,0))
         self.end_entry = ttk.Entry(range_frame, width=10, style='TEntry')
         self.end_entry.grid(row=0, column=3, padx=6, pady=3, sticky='ew')
         range_frame.columnconfigure(1, weight=1)
@@ -196,7 +453,8 @@ class ResourceExtractorApp:
 
         blocked_frame = tk.Frame(options_frame, bg="#1f5670")
         blocked_frame.pack(fill=tk.X, padx=12, pady=(0,8))
-        ttk.Label(blocked_frame, text="Números bloqueados:", style='Label.TLabel').grid(row=0, column=0, sticky='w')
+        self.blocked_label = ttk.Label(blocked_frame, text=_("blocked_numbers"), style='Label.TLabel')
+        self.blocked_label.grid(row=0, column=0, sticky='w')
         self.blocked_entry = ttk.Entry(blocked_frame, width=28, style='TEntry')
         self.blocked_entry.grid(row=0, column=1, padx=6, pady=3, sticky='ew')
         blocked_frame.columnconfigure(1, weight=1)
@@ -204,10 +462,12 @@ class ResourceExtractorApp:
         # Niveles: Ciudad y Depósito (1-25)
         levels_frame = tk.Frame(options_frame, bg="#1f5670")
         levels_frame.pack(fill=tk.X, padx=12, pady=(0,8))
-        ttk.Label(levels_frame, text="Nivel de Puesto Venta:", style='Label.TLabel').grid(row=0, column=0, sticky='w')
+        self.city_label = ttk.Label(levels_frame, text=_("city_level"), style='Label.TLabel')
+        self.city_label.grid(row=0, column=0, sticky='w')
         self.city_level_cb = ttk.Combobox(levels_frame, values=[str(i) for i in range(1,26)], state='readonly', width=6, textvariable=self.city_level_var, style='TCombobox')
         self.city_level_cb.grid(row=0, column=1, padx=6, pady=3, sticky='w')
-        ttk.Label(levels_frame, text="Nivel de depósito:", style='Label.TLabel').grid(row=0, column=2, sticky='w', padx=(12,0))
+        self.warehouse_label = ttk.Label(levels_frame, text=_("warehouse_level"), style='Label.TLabel')
+        self.warehouse_label.grid(row=0, column=2, sticky='w', padx=(12,0))
         self.warehouse_level_cb = ttk.Combobox(levels_frame, values=[str(i) for i in range(1,26)], state='readonly', width=6, textvariable=self.warehouse_level_var, style='TCombobox')
         self.warehouse_level_cb.grid(row=0, column=3, padx=6, pady=3, sticky='w')
         levels_frame.columnconfigure(1, weight=1)
@@ -215,23 +475,24 @@ class ResourceExtractorApp:
 
         action_frame = tk.Frame(options_frame, bg="#1f5670")
         action_frame.pack(fill=tk.X, padx=12, pady=(8,0))
-        self.recursos_totales_btn = self._add_side_button(action_frame, "Recursos Totales", lambda: self.process_resources('totales'), "#5cb85c", 'totales')
+        self.recursos_totales_btn = self._add_side_button(action_frame, _("total_resources"), lambda: self.process_resources('totales'), "#5cb85c", 'totales')
         self.recursos_totales_btn.pack(side=tk.LEFT, padx=3, pady=6, expand=True, fill=tk.X)
-        self.recursos_cuenta_btn = self._add_side_button(action_frame, "Recursos de Cuenta", lambda: self.process_resources('cuenta'), "#0275d8", 'cuenta')
+        self.recursos_cuenta_btn = self._add_side_button(action_frame, _("account_resources"), lambda: self.process_resources('cuenta'), "#0275d8", 'cuenta')
         self.recursos_cuenta_btn.pack(side=tk.LEFT, padx=3, pady=6, expand=True, fill=tk.X)
-        self.backpack_btn = self._add_side_button(action_frame, "Recursos de Mochila", lambda: self.process_resources('backpack'), "#9b59b6", 'mochila')
+        self.backpack_btn = self._add_side_button(action_frame, _("backpack_resources"), lambda: self.process_resources('backpack'), "#9b59b6", 'mochila')
         self.backpack_btn.pack(side=tk.LEFT, padx=3, pady=6, expand=True, fill=tk.X)
 
         update_frame = tk.Frame(options_frame, bg="#1f5670")
         update_frame.pack(fill=tk.X, padx=12, pady=(8,0))
-        self.update_btn = self._add_side_button(update_frame, "Actualizar GitHub", self.update_from_github, "#f0ad4e")
+        self.update_btn = self._add_side_button(update_frame, _("update_github"), self.update_from_github, "#f0ad4e")
         self.update_btn.pack(side=tk.LEFT, padx=3, pady=6, expand=True, fill=tk.X)
 
         progress_frame = tk.Frame(main_frame, bg="#15374a")
         progress_frame.grid(row=1, column=0, columnspan=2, sticky='ew', padx=12, pady=(8,0), ipadx=20)
         progress_inner = tk.Frame(progress_frame, bg="#1f5670")
         progress_inner.pack(fill=tk.X, padx=12, pady=12)
-        ttk.Label(progress_inner, text="Progreso de Procesamiento:", style='Label.TLabel').pack(anchor='center', pady=(0,8))
+        self.progress_title = ttk.Label(progress_inner, text=_("processing_progress"), style='Label.TLabel')
+        self.progress_title.pack(anchor='center', pady=(0,8))
         self.progress_bar = ttk.Progressbar(progress_inner, mode='determinate')
         self.progress_bar.pack(fill=tk.X, pady=6)
         self.progress_label = ttk.Label(progress_inner, text="0%", style='Label.TLabel')
@@ -254,7 +515,7 @@ class ResourceExtractorApp:
                     self.selected_images.append(file)
                     self.image_listbox.insert(tk.END, Path(file).name)
             if len(self.selected_images) >= 100:
-                messagebox.showwarning("Límite alcanzado", "Se ha alcanzado el máximo de 100 imágenes")
+                messagebox.showwarning(_("title"), _("limit_reached"))
     
     def clear_images(self):
         self.selected_images.clear()
@@ -399,18 +660,48 @@ class ResourceExtractorApp:
         try:
             img = Image.open(image_path)
         except Exception as e:
-            print("No se pudo abrir imagen:", image_path, e)
-            return []
+            print(f"ERROR: No se pudo abrir imagen: {image_path}, {e}")
+            return [], [], None
 
         img_proc = self.preprocess_image_for_ocr(img)
+
+        # Configurar tesseract si es necesario
+        try:
+            if not getattr(pytesseract.pytesseract, 'tesseract_cmd', None):
+                # Intentar encontrar tesseract en rutas comunes
+                possible_paths = [
+                    r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+                    r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+                    str(self._resolve_path('Tesseract-OCR', 'tesseract.exe'))
+                ]
+                found_tesseract = False
+                for path in possible_paths:
+                    try:
+                        if Path(path).exists():
+                            pytesseract.pytesseract.tesseract_cmd = str(path)
+                            print(f"DEBUG: Tesseract encontrado en: {path}")
+                            found_tesseract = True
+                            break
+                    except Exception:
+                        pass
+                if not found_tesseract:
+                    print(f"ADVERTENCIA: Tesseract no encontrado en rutas conocidas. Rutas buscadas: {possible_paths}")
+        except Exception as e:
+            print(f"ERROR configurando tesseract: {e}")
 
         # Quitar la whitelist para permitir lectura de letras (nombres de recurso)
         tconfig = r'--oem 3 --psm 6'
         try:
+            print(f"DEBUG: Llamando pytesseract con config: {tconfig}")
+            print(f"DEBUG: tesseract_cmd = {pytesseract.pytesseract.tesseract_cmd}")
             data = pytesseract.image_to_data(img_proc, output_type=pytesseract.Output.DICT, config=tconfig)
+            print(f"DEBUG: OCR completado. Entries: {len(data.get('text', []))}")
         except Exception as e:
-            print("Error pytesseract.image_to_data:", e)
-            return []
+            print(f"ERROR pytesseract.image_to_data: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            # Retornar vacío si falla
+            return [], [], None
 
         texts = data.get('text', [])
         confs = data.get('conf', [])
@@ -520,7 +811,7 @@ class ResourceExtractorApp:
     def preview_selected_image(self):
         sel = self.image_listbox.curselection()
         if not sel:
-            messagebox.showinfo("Selecciona", "Selecciona una imagen en la lista para previsualizar")
+            messagebox.showinfo(_("title"), _("select_image"))
             return
         idx = sel[0]
         image_path = self.selected_images[idx]
@@ -545,7 +836,7 @@ class ResourceExtractorApp:
             orig = None
         annotated = (img_proc.copy() if img_proc is not None else (orig.copy() if orig is not None else None))
         if annotated is None:
-            messagebox.showerror("Error", "No se pudo abrir imagen para anotación")
+            messagebox.showerror(_("title"), _("save_error", error="No se pudo abrir imagen para anotación"))
             return
 
         draw = ImageDraw.Draw(annotated)
@@ -599,7 +890,7 @@ class ResourceExtractorApp:
     def show_ocr_values(self):
         sel = self.image_listbox.curselection()
         if not sel:
-            messagebox.showinfo("Selecciona", "Selecciona una imagen en la lista para ver valores OCR")
+            messagebox.showinfo(_("title"), _("select_image_ocr"))
             return
         idx = sel[0]
         image_path = self.selected_images[idx]
@@ -658,9 +949,9 @@ class ResourceExtractorApp:
         try:
             with open(fp, 'w', encoding='utf-8') as f:
                 f.write(text)
-            messagebox.showinfo("Guardado", f"Archivo guardado:\n{fp}")
+            messagebox.showinfo(_("success"), _("save_success", path=fp))
         except Exception as e:
-            messagebox.showerror("Error", f"No se pudo guardar el archivo: {e}")
+            messagebox.showerror(_("title"), _("save_error", error=e))
 
     def _show_annotated_window(self, annotated_img, image_path, result):
         win = tk.Toplevel(self.root)
@@ -704,9 +995,9 @@ class ResourceExtractorApp:
             return
         try:
             pil_img.save(fp)
-            messagebox.showinfo("Guardado", f"Imagen anotada guardada en:\n{fp}")
+            messagebox.showinfo(_("success"), f"Imagen anotada guardada en: {fp}")
         except Exception as e:
-            messagebox.showerror("Error", f"No se pudo guardar la imagen: {e}")
+            messagebox.showerror(_("title"), f"No se pudo guardar la imagen: {e}")
 
     def _get_default_save_dir(self):
         # Guardar en la carpeta de instalación/exe cuando sea un .exe, o en el directorio del script en modo desarrollo.
@@ -718,6 +1009,7 @@ class ResourceExtractorApp:
     def _save_results_file(self, default_filename):
         default_dir = self._get_default_save_dir()
         initial_path = default_dir / default_filename
+        
         fp = filedialog.asksaveasfilename(
             defaultextension=".txt",
             filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
@@ -725,29 +1017,38 @@ class ResourceExtractorApp:
             initialfile=default_filename,
             title="Guardar resultados de recursos"
         )
+        
+        # Si el usuario canceló, usar la ruta por defecto
         if not fp:
             fp = str(initial_path)
+        
         try:
             with open(fp, 'w', encoding='utf-8') as f:
                 for idx, e in enumerate(self.output_entries, start=1):
                     if e is None:
-                        f.write(f"Cuenta {idx}: No se pudo procesar la imagen.\n")
+                        f.write(f"{_('account_number', idx=idx)} {_('failed_process')}\n")
                         f.write("---\n")
                         continue
-                    f.write(f"Nickname: {e.get('Nickname','')}\n")
-                    f.write(f"Nivel de ciudad: {e.get('Nivel de ciudad','')}\n")
-                    f.write(f"Nivel de depósito: {e.get('Nivel de depósito','')}\n")
-                    f.write(f"Comida: {int(e['Comida']) if e.get('Comida') is not None else 0}\n")
-                    f.write(f"Madera: {int(e['Madera']) if e.get('Madera') is not None else 0}\n")
-                    f.write(f"Piedra: {int(e['Piedra']) if e.get('Piedra') is not None else 0}\n")
-                    f.write(f"Oro: {int(e['Oro']) if e.get('Oro') is not None else 0}\n")
+                    f.write(f"{_('nickname')} {e.get('Nickname','')}\n")
+                    f.write(f"{_('city_level_display')} {e.get('Nivel de ciudad','')}\n")
+                    f.write(f"{_('warehouse_level_display')} {e.get('Nivel de depósito','')}\n")
+                    # Mostrar valores como están (pueden ser shorthand como "11.3M" o números enteros)
+                    food_val = e.get('Comida')
+                    wood_val = e.get('Madera')
+                    stone_val = e.get('Piedra')
+                    gold_val = e.get('Oro')
+                    f.write(f"{_('food')} {food_val if food_val is not None else '0'}\n")
+                    f.write(f"{_('wood')} {wood_val if wood_val is not None else '0'}\n")
+                    f.write(f"{_('stone')} {stone_val if stone_val is not None else '0'}\n")
+                    f.write(f"{_('gold')} {gold_val if gold_val is not None else '0'}\n")
                     f.write("---\n")
-            msg = f"Datos guardados en:\n{fp}"
+            msg = f"{_('save_success', path=fp)}"
             if self.failed_images:
-                msg += "\n\nPero hubo imágenes que no se pudieron leer:\n" + ", ".join(self.failed_images)
-            messagebox.showinfo("Éxito", msg)
+                msg += f"\n\n{_('failed_images', images=', '.join(self.failed_images))}"
+            messagebox.showinfo(_('success'), msg)
         except Exception as e:
-            messagebox.showerror("Error", f"No se pudo guardar el archivo: {e}")
+            messagebox.showerror("Error", f"{_('save_error')}: {e}")
+
 
     def load_kingdom_file(self):
         fp = filedialog.askopenfilename(filetypes=[("Text files","*.txt"), ("All files","*.*")], title="Selecciona archivo de Reino")
@@ -852,28 +1153,74 @@ class ResourceExtractorApp:
         kdir = self._resolve_path('kingdoms')
         vals = []
         try:
+            print(f"DEBUG: Buscando reinos en: {kdir}")
+            print(f"DEBUG: Existe? {kdir.exists()}")
             if kdir.exists() and kdir.is_dir():
                 for p in sorted(kdir.glob('*.txt')):
                     vals.append(p.name)
-        except Exception:
+                    print(f"DEBUG: Encontrado reino: {p.name}")
+        except Exception as e:
+            print(f"ERROR en _populate_reinos: {e}")
+            import traceback
+            traceback.print_exc()
             vals = []
+        
+        print(f"DEBUG: Reinos totales encontrados: {len(vals)} - {vals}")
+        
         self.reino_combobox['values'] = vals
         if vals:
             self.reino_combobox.set(vals[0])
             self.kingdom_template_path = str(kdir / vals[0])
+            print(f"DEBUG: Combobox actualizado. Seleccionado: {vals[0]}")
+        else:
+            print(f"ADVERTENCIA: No se encontraron reinos en {kdir}")
 
     def _on_reino_selected(self):
         sel = self.reino_combobox.get()
         if not sel:
             return
-        base = Path(__file__).parent
-        kpath = base / 'kingdoms' / sel
+        kdir = self._resolve_path('kingdoms')
+        kpath = kdir / sel
         if kpath.exists():
             self.kingdom_template_path = str(kpath)
 
+    def _on_language_selected(self):
+        """Cambiar el idioma de la aplicación"""
+        lang_display = self.language_cb.get()
+        lang_code = self.lang_code_map.get(lang_display, 'es')
+        set_language(lang_code)
+        self._update_ui_language()
+
+    def _update_ui_language(self):
+        """Actualiza todos los textos de la interfaz al idioma actual"""
+        # Títulos principales
+        self.title_label.config(text=_("title"))
+        self.selector_label.config(text=_("selector_images"))
+        self.options_label.config(text=_("config_kingdom"))
+        self.progress_title.config(text=_("processing_progress"))
+        
+        # Labels
+        self.language_label.config(text=_("language"))
+        self.reino_label.config(text=_("kingdom"))
+        self.start_label.config(text=_("start_number"))
+        self.end_label.config(text=_("end_number"))
+        self.blocked_label.config(text=_("blocked_numbers"))
+        self.city_label.config(text=_("city_level"))
+        self.warehouse_label.config(text=_("warehouse_level"))
+        
+        # Botones
+        self.add_images_btn.config(text=_("add_images"))
+        self.clear_list_btn.config(text=_("clear_list"))
+        self.new_window_btn.config(text=_("new_window"))
+        self.recursos_totales_btn.config(text=_("total_resources"))
+        self.recursos_cuenta_btn.config(text=_("account_resources"))
+        self.backpack_btn.config(text=_("backpack_resources"))
+        self.update_btn.config(text=_("update_github"))
+
+
     def process_resources(self, tipo):
         if not self.selected_images:
-            messagebox.showerror("Error", "No hay imágenes seleccionadas")
+            messagebox.showerror(_("title"), _("no_images"))
             return
 
         self.recursos_totales_btn.config(state=tk.DISABLED)
@@ -886,31 +1233,104 @@ class ResourceExtractorApp:
     def open_new_window(self):
         # Spawn a new process running the same script so user can open multiple independent GUIs
         try:
-            base = Path(__file__).parent
-            python = sys.executable
-            script = str(Path(__file__).resolve())
-            subprocess.Popen([python, script], cwd=str(base))
+            if getattr(sys, 'frozen', False):
+                # Si está empaquetado, ejecutar el exe directamente
+                subprocess.Popen([sys.executable])
+            else:
+                # Si está en desarrollo, ejecutar con python
+                python = sys.executable
+                script = str(Path(__file__).resolve())
+                subprocess.Popen([python, script])
         except Exception as e:
-            messagebox.showerror("Error", f"No se pudo abrir nueva ventana: {e}")
+            messagebox.showerror(_("title"), _("cannot_open_window", error=e))
 
     def update_from_github(self):
-        if not messagebox.askyesno("Actualizar", "¿Deseas obtener las ultimas actualizaciones desde GitHub?"):
+        if not messagebox.askyesno(_("update_confirm_title"), _("update_confirm")):
             return
-        threading.Thread(target=self._update_from_github_thread, daemon=True).start()
+        # Usar un hilo independiente sin daemon
+        thread = threading.Thread(target=self._update_from_github_thread, daemon=False)
+        thread.start()
 
     def _update_from_github_thread(self):
         self.root.after(0, lambda: self.update_btn.config(state=tk.DISABLED, text="Descargando..."))
         try:
             self._download_repo_resources()
-            self.root.after(0, lambda: self._populate_reinos())
-            self.root.after(0, lambda: messagebox.showinfo("Actualización completa", "Los reinos y recursos se han sincronizado con GitHub."))
+            print("DEBUG: Descarga completada. Aplicando actualizaciones...")
+            
+            # Aplicar los archivos descargados INMEDIATAMENTE
+            self._apply_pending_updates()
+            
+            print("DEBUG: Actualizaciones aplicadas. Recargando reinos...")
+            # Recargar los reinos desde AppData en el hilo principal
+            self.root.after(100, lambda: self._populate_reinos())
+            # Dar tiempo para que se actualice la GUI
+            self.root.after(200, lambda: self.root.update_idletasks())
+            
+            self.root.after(300, lambda: messagebox.showinfo(
+                _("update_complete_title"), 
+                _("update_complete")
+            ))
         except Exception as e:
-            self.root.after(0, lambda: messagebox.showerror("Error", f"No se pudo actualizar desde GitHub: {e}"))
+            error_msg = str(e)
+            print(f"ERROR en actualizacion: {error_msg}")
+            import traceback
+            traceback.print_exc()
+            self.root.after(0, lambda error_msg=error_msg: messagebox.showerror(_("title"), _("update_error", error=error_msg)))
         finally:
-            self.root.after(0, lambda: self.update_btn.config(state=tk.NORMAL, text="Actualizar GitHub"))
+            self.root.after(0, lambda: self.update_btn.config(state=tk.NORMAL, text=_("update_github")))
 
     def _download_repo_resources(self):
         url = GITHUB_REPO_ZIP_URL
+        install_base = self._get_install_base()
+        
+        # Usar carpeta de AppData para el log y actualizaciones pendientes (siempre tiene permisos de escritura)
+        try:
+            appdata = Path(os.environ.get('APPDATA', Path.home() / 'AppData' / 'Roaming'))
+            app_data_dir = appdata / 'RSS STORE APTAC'
+            app_data_dir.mkdir(parents=True, exist_ok=True)
+            log_file = app_data_dir / 'update_debug.log'
+            pending_dir = app_data_dir / '_update_pending'
+        except Exception as e:
+            # Fallback: usar archivo temporal
+            log_file = Path(tempfile.gettempdir()) / 'rss_update_debug.log'
+            pending_dir = Path(tempfile.gettempdir()) / 'rss_update_pending'
+            print(f"Advertencia: No se pudo crear carpeta AppData: {e}")
+        
+        def log_msg(msg):
+            try:
+                with open(log_file, 'a', encoding='utf-8') as f:
+                    f.write(f"[{datetime.now()}] {msg}\n")
+            except Exception as e:
+                print(f"[LOG ERROR] No se pudo escribir log: {e}")
+            print(msg)
+        
+        # Limpiar log anterior
+        try:
+            if log_file.exists():
+                log_file.unlink()
+        except Exception as e:
+            log_msg(f"Advertencia: No se pudo limpiar log anterior: {e}")
+        
+        log_msg("===== INICIANDO DESCARGA DE GITHUB =====")
+        log_msg(f"URL: {url}")
+        log_msg(f"Instalación en: {install_base}")
+        log_msg(f"Log en: {log_file}")
+        
+        # Limpiar carpeta de actualizaciones pendientes anterior (si existe)
+        if pending_dir.exists():
+            try:
+                shutil.rmtree(pending_dir)
+                log_msg(f"Carpeta temporal anterior limpiada")
+            except Exception as e:
+                log_msg(f"Advertencia al limpiar carpeta temporal: {e}")
+        
+        try:
+            pending_dir.mkdir(parents=True, exist_ok=True)
+            log_msg(f"Carpeta temporal creada: {pending_dir}")
+        except Exception as e:
+            log_msg(f"ERROR: No se pudo crear carpeta temporal: {e}")
+            raise Exception(f"No se pudo crear carpeta temporal: {e}")
+        
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_zip = Path(tmpdir) / 'repo.zip'
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -920,8 +1340,11 @@ class ResourceExtractorApp:
                     if response.getcode() != 200:
                         raise Exception(f"Respuesta inválida de GitHub: {response.getcode()}")
                     
+                    log_msg(f"Respuesta HTTP: {response.getcode()}")
+                    
                     # Mostrar progreso de descarga
                     total_size = int(response.headers.get('content-length', 0))
+                    log_msg(f"Tamaño total: {total_size} bytes")
                     downloaded = 0
                     chunk_size = 8192
                     
@@ -938,11 +1361,18 @@ class ResourceExtractorApp:
                                 self.root.after(0, lambda p=progress: self.update_btn.config(
                                     text=f"Actualizando... {p}%"
                                 ))
+                    
+                    log_msg(f"Descarga completada: {downloaded} bytes")
             except Exception as e:
+                log_msg(f"Error en descarga: {e}")
                 raise Exception(f"Error descargando de GitHub: {e}")
             
             try:
                 with zipfile.ZipFile(tmp_zip, 'r') as zf:
+                    # Debug: mostrar contenido del ZIP
+                    all_files = zf.namelist()
+                    log_msg(f"ZIP contiene {len(all_files)} elementos")
+                    
                     root_prefix = None
                     for name in zf.namelist():
                         if name.endswith('/'):
@@ -950,11 +1380,16 @@ class ResourceExtractorApp:
                         root_prefix = name.split('/', 1)[0] + '/'
                         break
                     
+                    log_msg(f"root_prefix detectado: '{root_prefix}'")
+                    
                     if not root_prefix:
                         raise Exception('No se encontró el contenido del repositorio en el ZIP')
                     
-                    install_dir = self._get_install_base()
+                    # Directorios y archivos que NO deben ser sobrescritos (datos del usuario)
+                    protected_items = {'GUARDADOS', 'output', 'update_debug.log'}
+                    
                     files_updated = 0
+                    log_msg("=== EXTRAYENDO ARCHIVOS A CARPETA TEMPORAL ===")
                     
                     for name in zf.namelist():
                         if not name.startswith(root_prefix):
@@ -962,53 +1397,72 @@ class ResourceExtractorApp:
                         
                         rel_path = name[len(root_prefix):]
                         
-                        # Actualizar solo folders de interés
-                        if rel_path.startswith('kingdoms/') or rel_path.startswith('Iconos/'):
-                            target = install_dir / rel_path
-                            
-                            if name.endswith('/'):
-                                target.mkdir(parents=True, exist_ok=True)
-                                continue
-                            
-                            target.parent.mkdir(parents=True, exist_ok=True)
-                            
-                            try:
-                                with zf.open(name) as src, open(target, 'wb') as dst:
-                                    dst.write(src.read())
-                                files_updated += 1
-                            except Exception as e:
-                                print(f"Advertencia: No se pudo actualizar {rel_path}: {e}")
+                        # Saltar carpetas protegidas del usuario
+                        first_part = rel_path.split('/')[0]
+                        if first_part in protected_items:
+                            log_msg(f"Saltando carpeta protegida: {rel_path}")
+                            continue
+                        
+                        # Saltar directorios
+                        if name.endswith('/'):
+                            target = pending_dir / rel_path
+                            target.mkdir(parents=True, exist_ok=True)
+                            continue
+                        
+                        target = pending_dir / rel_path
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        
+                        try:
+                            with zf.open(name) as src, open(target, 'wb') as dst:
+                                dst.write(src.read())
+                            files_updated += 1
+                            log_msg(f"Extraído: {rel_path}")
+                                    
+                        except Exception as e:
+                            log_msg(f"Advertencia al extraer {rel_path}: {e}")
+                    
+                    log_msg(f"Total archivos descargados: {files_updated}")
                     
                     if files_updated == 0:
                         raise Exception("No se encontraron archivos para actualizar")
                     
-                    print(f"Actualización completada: {files_updated} archivos actualizados")
+                    log_msg(f"Archivos listos para aplicar en la carpeta temporal")
                     
             except zipfile.BadZipFile:
+                log_msg("BadZipFile: El archivo descargado no es un ZIP válido")
                 raise Exception("El archivo descargado no es un ZIP válido")
             except Exception as e:
+                log_msg(f"Exception en extracción: {e}")
                 raise Exception(f"Error extrayendo archivos: {e}")
             finally:
-                self.root.after(0, lambda: self.update_btn.config(text="Actualizar GitHub"))
+                self.root.after(0, lambda: self.update_btn.config(text=_("update_github")))
         
         return True
 
     def _process_thread(self, tipo):
         try:
+            # DEBUG: Confirmar que el hilo inició
+            print(f"DEBUG: _process_thread iniciado con tipo={tipo}")
+            
             self.extracted_data.clear()
             self.failed_images.clear()
             # reset output entries each run
             self.output_entries = [None] * len(self.selected_images)
 
             total_images = len(self.selected_images)
+            print(f"DEBUG: Total de imágenes: {total_images}")
 
             # Prepare nickname list in selection order to preserve sequence even with parallel processing
             tpl = self.parse_kingdom_template()
+            print(f"DEBUG: Template parseado: {tpl.get('fields', {})}")
+            
             try:
                 nick_list = self._build_nickname_list(tpl, total_images)
+                print(f"DEBUG: Nicknames generados: {nick_list}")
             except ValueError as err:
                 err_msg = str(err)
-                self.root.after(0, lambda err_msg=err_msg: messagebox.showerror("Error", err_msg))
+                print(f"ERROR en nicknames: {err_msg}")
+                self.root.after(0, lambda err_msg=err_msg: messagebox.showerror(_("title"), err_msg))
                 return
 
             # mapping image_path -> index for placing results
@@ -1020,27 +1474,36 @@ class ResourceExtractorApp:
 
             def _process_single(image_path):
                 try:
+                    print(f"DEBUG: Procesando imagen: {Path(image_path).name}")
                     res = self.extract_resources_from_image(image_path)
+                    print(f"DEBUG: OCR resultado tipo: {type(res)}, contenido: {res if not isinstance(res, tuple) else f'tuple con {len(res)} items'}")
+                    
                     if isinstance(res, tuple) and len(res) == 3:
                         rows, entries, img_proc = res
                     else:
                         rows, entries, img_proc = [], [], None
+                    
+                    print(f"DEBUG: Rows extraído: {rows}")
+                    
                     if rows and len(rows) == 4:
                         values = []
                         for de_obj, tot in rows:
                             if tipo == 'cuenta':
+                                # Calcular: Recursos totales - De Objetos
                                 tot_num = self.parse_shorthand_to_number(tot) if tot else None
                                 de_num = self.parse_shorthand_to_number(de_obj) if de_obj else 0.0
                                 if tot_num is None:
                                     values.append(None)
                                 else:
-                                    values.append(int(round(tot_num - (de_num or 0.0))))
+                                    result = tot_num - (de_num or 0.0)
+                                    # Convertir de vuelta a formato shorthand
+                                    values.append(self.format_number_shorthand(result))
                             elif tipo == 'backpack':
-                                de_num = self.parse_shorthand_to_number(de_obj) if de_obj else None
-                                values.append(int(round(de_num)) if de_num is not None else None)
-                            else:
-                                tot_num = self.parse_shorthand_to_number(tot) if tot else None
-                                values.append(int(round(tot_num)) if tot_num is not None else None)
+                                # Mantener el valor "De Objetos" en formato shorthand
+                                values.append(de_obj if de_obj else None)
+                            else:  # tipo == 'totales'
+                                # Mantener el valor en formato shorthand (ej: 11.3M)
+                                values.append(tot if tot else None)
                         return (image_path, values)
                     else:
                         return (image_path, None)
@@ -1080,24 +1543,54 @@ class ResourceExtractorApp:
             self._update_progress(100)
             time.sleep(0.25)
 
-            if not getattr(self, 'output_entries', None):
-                self.root.after(0, lambda: messagebox.showwarning("Advertencia", "No se encontraron datos procesables en las imágenes"))
+            # Verificar si al menos un archivo fue procesado exitosamente
+            has_valid_entries = any(e is not None for e in self.output_entries)
+            
+            print(f"DEBUG: output_entries = {self.output_entries}")
+            print(f"DEBUG: has_valid_entries = {has_valid_entries}")
+            print(f"DEBUG: failed_images = {self.failed_images}")
+            
+            if not has_valid_entries:
+                error_detail = f"Se procesaron {len(self.selected_images)} imágenes pero TODAS fallaron."
+                if self.failed_images:
+                    error_detail += f"\n\nImágenes que fallaron: {', '.join(self.failed_images[:5])}"
+                    if len(self.failed_images) > 5:
+                        error_detail += f"... y {len(self.failed_images) - 5} más"
+                print(f"ERROR CRÍTICO: {error_detail}")
+                self.root.after(0, lambda error_detail=error_detail: messagebox.showerror(_("title"), error_detail))
             else:
+                print(f"DEBUG: ✓ Al menos {sum(1 for e in self.output_entries if e is not None)} imágenes procesadas exitosamente")
                 try:
-                    kname = 'results'
-                    if getattr(self, 'kingdom_template_path', None):
-                        try:
-                            kname = Path(self.kingdom_template_path).stem
-                        except:
-                            kname = 'results'
-                    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    default_filename = f"{kname}_results_{ts}.txt"
-                    self.root.after(0, lambda default_filename=default_filename: self._save_results_file(default_filename))
+                    # Obtener nombre del reino y limpiar la extensión .txt si la tiene
+                    reino_name = self.reino_combobox.get() if getattr(self, 'reino_combobox', None) else 'Reino'
+                    if reino_name.endswith('.txt'):
+                        reino_name = reino_name[:-4]
+                    
+                    print(f"DEBUG: Reino seleccionado: {reino_name}")
+                    
+                    # Mapear tipo a clave de traducción del botón
+                    tipo_translation_map = {'totales': 'total_resources', 'cuenta': 'account_resources', 'backpack': 'backpack'}
+                    button_key = tipo_translation_map.get(tipo, tipo)
+                    # Obtener nombre del botón traducido al idioma actual y limpiarlo
+                    tipo_name = _(button_key).lower().replace(' ', '-').replace('á', 'a').replace('é', 'e').replace('í', 'i').replace('ó', 'o').replace('ú', 'u')
+                    
+                    # Fecha en formato YYYY-MM-DD
+                    date_str = datetime.now().strftime('%Y-%m-%d')
+                    
+                    # Nombre del archivo: Reino_boton-fecha.txt (sin código de idioma)
+                    default_filename = f"{reino_name}_{tipo_name}-{date_str}.txt"
+                    print(f"DEBUG: Nombre de archivo sugerido: {default_filename}")
+                    
+                    # Llamar directamente desde el hilo principal
+                    self.root.after(100, lambda default_filename=default_filename: self._save_results_file(default_filename))
                 except Exception as e:
                     err_msg = f"No se pudo guardar el archivo: {e}"
-                    self.root.after(0, lambda err_msg=err_msg: messagebox.showerror("Error", err_msg))
+                    print(f"ERROR GUARDANDO: {err_msg}")
+                    import traceback
+                    traceback.print_exc()
+                    self.root.after(0, lambda err_msg=err_msg: messagebox.showerror(_("title"), _("save_error", error=err_msg)))
         except Exception as e:
-            self.root.after(0, lambda: messagebox.showerror("Error", f"Error durante el procesamiento: {e}"))
+            self.root.after(0, lambda: messagebox.showerror(_("title"), _("processing_error", error=e)))
         finally:
             self.root.after(0, lambda: self.recursos_totales_btn.config(state=tk.NORMAL))
             self.root.after(0, lambda: self.recursos_cuenta_btn.config(state=tk.NORMAL))
@@ -1111,7 +1604,7 @@ class ResourceExtractorApp:
 
     def _show_failed_images_notice(self):
         if self.failed_images:
-            self.root.after(0, lambda: messagebox.showinfo("Aviso", "Algunas imágenes no fueron procesadas: " + ", ".join(self.failed_images)))
+            self.root.after(0, lambda: messagebox.showinfo(_("no_processable_data_title"), _("failed_images", images=", ".join(self.failed_images))))
 
 def main():
     root = tk.Tk()
