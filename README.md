@@ -1,53 +1,53 @@
-# RSS STORE APTAC
+# RSS STORE APTAC - Resource Calculator
 
-Aplicación de escritorio para extraer recursos de capturas de pantalla de reinos, con extracción de OCR y generación de nicknames.
+**Disponible en múltiples idiomas / Available in multiple languages:**
 
-## Qué incluye
-- `app.py`: aplicación principal en Tkinter.
-- `kingdoms/`: plantillas de reino (`.txt`) que el usuario puede seleccionar.
-- `Iconos/`: iconos PNG usados por la aplicación.
+- 🇪🇸 [Español](docs/README_es.md)
+- 🇬🇧 [English](docs/README_en.md)
+- 🇵🇹 [Português](docs/README_pt.md)
+- 🇻🇳 [Tiếng Việt](docs/README_vi.md)
+- 🇮🇩 [Bahasa Indonesia](docs/README_id.md)
+- 🇫🇷 [Français](docs/README_fr.md)
 
-## Guía de uso para usuarios
+---
 
-Esta sección explica cómo utilizar la aplicación paso a paso, cómo tomar capturas (PC y móvil), qué significan los campos y cómo introducir los números correctamente.
+## 🚀 Quick Start / Inicio Rápido
 
-### Flujo rápido (resumen)
-- Abrir la aplicación `RSS STORE APTAC.exe`.
-- Pulsar `Agregar Imágenes` y seleccionar las capturas de pantalla.
-- Seleccionar el `Reino` adecuado.
-- Rellenar `Número de inicio` y `Número de fin` con el nuemero correcto de tus cuentas.
-- Si hace falta, indicar `Números bloqueados` para saltos especificos.
-- Elegir adecuadamente `Nivel de ciudad` y `Nivel de depósito` (1–25).
-- Pulsar uno de los botones de recursos según la salida que necesites.
+**Windows users / Usuarios de Windows:**
+1. Download `RSS_STORE_APTAC_Installer.exe` from [Releases](../../releases)
+2. Run the installer / Ejecuta el instalador
+3. Done! App will auto-update / ¡Hecho! La app se actualizará automáticamente
 
-### Cómo tomar las capturas (importante)
-- Capturas desde PC (recomendado):
-	- Abre el juego en ventana o modo que permita capturas claras de la ventana de Recursos.
-	- Haz la captura del diálogo que muestra los recursos.
-	- Asegúrate que los números y etiquetas estén legibles (fuente no recortada).
+**Características / Features:**
+- ✨ OCR-based resource extraction / Extracción de recursos con OCR
+- 🎯 Multi-language support (6 languages) / Soporte multiidioma
+- 🔄 Automatic updates from GitHub / Actualizaciones automáticas desde GitHub
+- 📊 Batch image processing / Procesamiento por lotes
+- 💾 CSV/TXT export / Exportación a CSV/TXT
+- 🌐 Respects language selection / Respeta el idioma seleccionado
 
-  ![Captura desde PC](Ejemplos/Foto-desde-PC.png)
+---
 
-- Capturas desde móvil: (importante)
-	- Si usas el móvil, transfiere las imágenes al PC (por USB, Airdrop, Google Drive, Telegram, etc.).
-	- Evita fotos anguladas o con zonas borrosas; la app funciona mejor con screenshots limpias (sin sombras ni reflejos).
+## 📖 Documentation / Documentación
 
-  ![Captura desde móvil](Ejemplos/Foto-desde-Movil.png)
+**Select your language above / Selecciona tu idioma arriba**
 
-### Formato de `Número de inicio`, `Número de fin` y `Números bloqueados`
-- `Número de inicio` y `Número de fin`: deben ser solo dígitos (p. ej. `1` y `30`).
-- `Números bloqueados` admite dos formatos:
-	- Rango: `001-010` o `1-10` (se interpretan como todos los números del rango).
-	- Lista: `1,3,5,7` o con espacios `1, 3, 5`.
-- Ejemplos:
-	- `start=1`, `end=10`, `bloqueados=3,5` → cuentas usadas: 1,2,4,6,7,8,9,10 (siempre según cantidad de imágenes seleccionadas).
-	- Si el número de imágenes no coincide con las cuentas válidas, la app mostrará un error para corregir entradas.
+---
 
-### Campos `Nivel de ciudad` y `Nivel de depósito`
-- Ambos son selectores (1–25). Indica el nivel del Puesto de Venta (puesto) y el Depósito que se aplicará a todas las cuentas en el guardado generado.
+## 🔧 For Developers
 
-  ![Niveles de Puesto de Venta](Ejemplos/Niveles-Puesto-de-Venta.png)
-  ![Niveles de Almacen](Ejemplos/Niveles-de-Almacen.png)
+- **Build:** `build.bat`
+- **Dependencies:** See `requirements.txt`
+- **Update script:** `update_helper.py`
+- **Source:** `app.py`, `translations.py`
+- **Install script:** `actualizar.bat`
+
+---
+
+**Repository:** https://github.com/Aptac0/Resource-Calculator
+
+**Latest Release:** [v1.0.0](../../releases/tag/v1.0.0)
+
   ![Tecnologia Maxima](Ejemplos/Tecnologia-Maxima.png)
 
 ### Qué hace cada botón
