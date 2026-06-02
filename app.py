@@ -17,6 +17,7 @@ import urllib.parse
 import zipfile
 import tempfile
 import webbrowser
+import shutil
 from translations import get_translator, set_language, _
 
 # Si Tesseract no está en la ruta del sistema, pon aquí la ruta correcta:
@@ -50,6 +51,10 @@ class ResourceExtractorApp:
         self.warehouse_level_var = tk.StringVar(value='1')
         # Variable para idioma
         self.language_var = tk.StringVar(value='es')
+        
+        # Aplicar actualizaciones pendientes (si existen)
+        self._apply_pending_updates()
+        
         # Cargar icono de la ventana
         self._load_window_icon()
         
@@ -69,6 +74,45 @@ class ResourceExtractorApp:
         if getattr(sys, 'frozen', False):
             return Path(sys.executable).parent
         return Path(__file__).parent
+    
+    def _apply_pending_updates(self):
+        """Aplicar actualizaciones pendientes de reinicio anterior"""
+        install_base = self._get_install_base()
+        pending_dir = install_base / '_update_pending'
+        
+        if not pending_dir.exists():
+            return
+        
+        try:
+            # Copiar todos los archivos desde _update_pending al directorio raíz
+            for src_file in pending_dir.rglob('*'):
+                if src_file.is_file():
+                    rel_path = src_file.relative_to(pending_dir)
+                    dst_file = install_base / rel_path
+                    
+                    # No sobrescribir archivos protegidos
+                    if dst_file.name in {'update_debug.log'}:
+                        continue
+                    if rel_path.parts and rel_path.parts[0] in {'GUARDADOS', 'output'}:
+                        continue
+                    
+                    # Crear directorio si no existe
+                    dst_file.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    # Copiar archivo
+                    try:
+                        shutil.copy2(src_file, dst_file)
+                    except Exception as e:
+                        print(f"Advertencia al copiar {rel_path}: {e}")
+            
+            # Eliminar carpeta de actualizaciones pendientes
+            try:
+                shutil.rmtree(pending_dir)
+                print("Actualizaciones aplicadas correctamente")
+            except Exception as e:
+                print(f"Advertencia al limpiar carpeta temporal: {e}")
+        except Exception as e:
+            print(f"Error aplicando actualizaciones pendientes: {e}")
 
     def _resolve_path(self, *parts):
         install_base = self._get_install_base()
@@ -1000,7 +1044,11 @@ class ResourceExtractorApp:
         try:
             self._download_repo_resources()
             self.root.after(0, lambda: self._populate_reinos())
-            self.root.after(0, lambda: messagebox.showinfo("Actualización completa", "Los reinos y recursos se han sincronizado correctamente."))
+            self.root.after(0, lambda: messagebox.showinfo(
+                "Actualización completada", 
+                "Los archivos se han descargado correctamente.\n\n"
+                "Por favor, REINICIA LA APLICACIÓN para aplicar los cambios."
+            ))
         except Exception as e:
             error_msg = str(e)
             print(f"Error en actualización: {error_msg}")
@@ -1010,7 +1058,9 @@ class ResourceExtractorApp:
 
     def _download_repo_resources(self):
         url = GITHUB_REPO_ZIP_URL
-        log_file = self._get_install_base() / 'update_debug.log'
+        install_base = self._get_install_base()
+        pending_dir = install_base / '_update_pending'
+        log_file = install_base / 'update_debug.log'
         
         def log_msg(msg):
             with open(log_file, 'a') as f:
@@ -1025,6 +1075,15 @@ class ResourceExtractorApp:
         
         log_msg("===== INICIANDO DESCARGA DE GITHUB =====")
         log_msg(f"URL: {url}")
+        
+        # Limpiar carpeta de actualizaciones pendientes anterior (si existe)
+        if pending_dir.exists():
+            try:
+                shutil.rmtree(pending_dir)
+            except:
+                pass
+        
+        pending_dir.mkdir(parents=True, exist_ok=True)
         
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_zip = Path(tmpdir) / 'repo.zip'
@@ -1080,16 +1139,11 @@ class ResourceExtractorApp:
                     if not root_prefix:
                         raise Exception('No se encontró el contenido del repositorio en el ZIP')
                     
-                    install_dir = self._get_install_base()
-                    log_msg(f"install_dir: {install_dir}")
-                    
                     # Directorios y archivos que NO deben ser sobrescritos (datos del usuario)
                     protected_items = {'GUARDADOS', 'output', 'update_debug.log'}
                     
                     files_updated = 0
-                    downloaded_files = set()  # Mantener registro de archivos descargados
-                    
-                    log_msg("=== ACTUALIZANDO TODOS LOS ARCHIVOS DEL PROGRAMA ===")
+                    log_msg("=== EXTRAYENDO ARCHIVOS A CARPETA TEMPORAL ===")
                     
                     for name in zf.namelist():
                         if not name.startswith(root_prefix):
@@ -1105,29 +1159,28 @@ class ResourceExtractorApp:
                         
                         # Saltar directorios
                         if name.endswith('/'):
-                            target = install_dir / rel_path
+                            target = pending_dir / rel_path
                             target.mkdir(parents=True, exist_ok=True)
                             continue
                         
-                        target = install_dir / rel_path
+                        target = pending_dir / rel_path
                         target.parent.mkdir(parents=True, exist_ok=True)
                         
                         try:
                             with zf.open(name) as src, open(target, 'wb') as dst:
                                 dst.write(src.read())
                             files_updated += 1
-                            log_msg(f"Actualizado: {rel_path}")
-                            downloaded_files.add(str(target.relative_to(install_dir)))
+                            log_msg(f"Extraído: {rel_path}")
                                     
                         except Exception as e:
-                            log_msg(f"Advertencia al actualizar {rel_path}: {e}")
+                            log_msg(f"Advertencia al extraer {rel_path}: {e}")
                     
-                    log_msg(f"Total archivos actualizados: {files_updated}")
+                    log_msg(f"Total archivos descargados: {files_updated}")
                     
                     if files_updated == 0:
                         raise Exception("No se encontraron archivos para actualizar")
                     
-                    log_msg(f"Actualización completada: {files_updated} archivos descargados y sincronizados")
+                    log_msg(f"Archivos listos para aplicar en la carpeta temporal")
                     
             except zipfile.BadZipFile:
                 log_msg("BadZipFile: El archivo descargado no es un ZIP válido")
