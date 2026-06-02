@@ -43,52 +43,6 @@ GITHUB_EXE_NAME = "RSS STORE APTAC.exe"
 APP_NAME = "RSS STORE APTAC"
 APP_VERSION = "1.0.0"
 
-# Configurar logging en archivo
-class LogCapture:
-    def __init__(self):
-        self.log_file = None
-        self.original_stdout = sys.stdout
-        self.original_stderr = sys.stderr
-        self._init_log_file()
-    
-    def _init_log_file(self):
-        try:
-            appdata = Path(os.environ.get('APPDATA', Path.home() / 'AppData' / 'Roaming'))
-            app_data_dir = appdata / 'RSS STORE APTAC'
-            app_data_dir.mkdir(parents=True, exist_ok=True)
-            self.log_file = app_data_dir / f"debug_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-            print(f"Log file: {self.log_file}", file=self.original_stdout)
-        except Exception as e:
-            print(f"Error al crear log: {e}", file=self.original_stderr)
-    
-    def write(self, message):
-        # Escribir a la consola original si existe
-        try:
-            self.original_stdout.write(message)
-            self.original_stdout.flush()
-        except:
-            pass
-        
-        # Escribir al archivo de log
-        if self.log_file:
-            try:
-                with open(self.log_file, 'a', encoding='utf-8') as f:
-                    f.write(message)
-                    f.flush()
-            except:
-                pass
-    
-    def flush(self):
-        try:
-            self.original_stdout.flush()
-        except:
-            pass
-
-# Redirigir stdout
-log_capture = LogCapture()
-sys.stdout = log_capture
-sys.stderr = log_capture
-
 class ResourceExtractorApp:
     def __init__(self, root):
         self.root = root
@@ -1386,7 +1340,6 @@ class ResourceExtractorApp:
         try:
             # DEBUG: Confirmar que el hilo inició
             print(f"DEBUG: _process_thread iniciado con tipo={tipo}")
-            self.root.after(0, lambda: messagebox.showinfo("DEBUG", f"Iniciando procesamiento de {len(self.selected_images)} imágenes..."))
             
             self.extracted_data.clear()
             self.failed_images.clear()
@@ -1406,7 +1359,7 @@ class ResourceExtractorApp:
             except ValueError as err:
                 err_msg = str(err)
                 print(f"ERROR en nicknames: {err_msg}")
-                self.root.after(0, lambda err_msg=err_msg: messagebox.showerror("Error en Nicknames", err_msg))
+                self.root.after(0, lambda err_msg=err_msg: messagebox.showerror("Error en Configuración", f"Por favor revisa los números de inicio/fin:\n\n{err_msg}"))
                 return
 
             # mapping image_path -> index for placing results
