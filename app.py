@@ -1060,11 +1060,23 @@ class ResourceExtractorApp:
         url = GITHUB_REPO_ZIP_URL
         install_base = self._get_install_base()
         pending_dir = install_base / '_update_pending'
-        log_file = install_base / 'update_debug.log'
+        
+        # Usar carpeta de AppData para el log (siempre tiene permisos de escritura)
+        try:
+            appdata = Path(os.environ.get('APPDATA', Path.home() / 'AppData' / 'Roaming'))
+            log_dir = appdata / 'RSS STORE APTAC'
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_file = log_dir / 'update_debug.log'
+        except:
+            # Fallback: usar archivo temporal
+            log_file = Path(tempfile.gettempdir()) / 'rss_update_debug.log'
         
         def log_msg(msg):
-            with open(log_file, 'a') as f:
-                f.write(f"[{datetime.now()}] {msg}\n")
+            try:
+                with open(log_file, 'a') as f:
+                    f.write(f"[{datetime.now()}] {msg}\n")
+            except:
+                pass  # Silenciosamente ignorar errores de log
             print(msg)
         
         # Limpiar log anterior
