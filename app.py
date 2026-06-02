@@ -85,13 +85,19 @@ class ResourceExtractorApp:
     
     def _apply_pending_updates(self):
         """Aplicar actualizaciones pendientes de reinicio anterior"""
-        install_base = self._get_install_base()
-        pending_dir = install_base / '_update_pending'
+        try:
+            appdata = Path(os.environ.get('APPDATA', Path.home() / 'AppData' / 'Roaming'))
+            app_data_dir = appdata / 'RSS STORE APTAC'
+            pending_dir = app_data_dir / '_update_pending'
+        except Exception:
+            # Fallback: usar archivo temporal
+            pending_dir = Path(tempfile.gettempdir()) / 'rss_update_pending'
         
         if not pending_dir.exists():
             return
         
         try:
+            install_base = self._get_install_base()
             # Copiar todos los archivos desde _update_pending al directorio raíz
             for src_file in pending_dir.rglob('*'):
                 if src_file.is_file():
@@ -1067,17 +1073,18 @@ class ResourceExtractorApp:
     def _download_repo_resources(self):
         url = GITHUB_REPO_ZIP_URL
         install_base = self._get_install_base()
-        pending_dir = install_base / '_update_pending'
         
-        # Usar carpeta de AppData para el log (siempre tiene permisos de escritura)
+        # Usar carpeta de AppData para el log y actualizaciones pendientes (siempre tiene permisos de escritura)
         try:
             appdata = Path(os.environ.get('APPDATA', Path.home() / 'AppData' / 'Roaming'))
-            log_dir = appdata / 'RSS STORE APTAC'
-            log_dir.mkdir(parents=True, exist_ok=True)
-            log_file = log_dir / 'update_debug.log'
+            app_data_dir = appdata / 'RSS STORE APTAC'
+            app_data_dir.mkdir(parents=True, exist_ok=True)
+            log_file = app_data_dir / 'update_debug.log'
+            pending_dir = app_data_dir / '_update_pending'
         except Exception as e:
             # Fallback: usar archivo temporal
             log_file = Path(tempfile.gettempdir()) / 'rss_update_debug.log'
+            pending_dir = Path(tempfile.gettempdir()) / 'rss_update_pending'
             print(f"Advertencia: No se pudo crear carpeta AppData: {e}")
         
         def log_msg(msg):
