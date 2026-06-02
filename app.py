@@ -902,8 +902,8 @@ class ResourceExtractorApp:
         sel = self.reino_combobox.get()
         if not sel:
             return
-        base = Path(__file__).parent
-        kpath = base / 'kingdoms' / sel
+        kdir = self._resolve_path('kingdoms')
+        kpath = kdir / sel
         if kpath.exists():
             self.kingdom_template_path = str(kpath)
 
@@ -956,10 +956,14 @@ class ResourceExtractorApp:
     def open_new_window(self):
         # Spawn a new process running the same script so user can open multiple independent GUIs
         try:
-            base = Path(__file__).parent
+            install_base = self._get_install_base()
             python = sys.executable
-            script = str(Path(__file__).resolve())
-            subprocess.Popen([python, script], cwd=str(base))
+            # Si está empaquetado, usar el ejecutable directamente
+            if getattr(sys, 'frozen', False):
+                script = str(sys.executable)
+            else:
+                script = str(Path(__file__).resolve())
+            subprocess.Popen([python, script], cwd=str(install_base))
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo abrir nueva ventana: {e}")
 
