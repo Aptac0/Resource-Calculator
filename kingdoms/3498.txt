@@ -1,0 +1,6 @@
+Nickname: [S98C]3498Aptac000
+Comida: 0
+Madera: 0
+Piedra: 0
+Oro: 0
+---
