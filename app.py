@@ -39,7 +39,7 @@ GITHUB_REPO = "Resource-Calculator"
 GITHUB_BRANCH = "main"
 GITHUB_REPO_ZIP_URL = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/archive/refs/heads/{GITHUB_BRANCH}.zip"
 GITHUB_RELEASES_URL = f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
-GITHUB_EXE_NAME = "RSS STORE APTAC.exe"
+GITHUB_EXE_NAME = "RSS.STORE.APTAC.exe"
 APP_NAME = "RSS STORE APTAC"
 APP_VERSION = "1.0.0"
 
