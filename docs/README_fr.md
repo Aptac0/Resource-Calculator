@@ -87,6 +87,47 @@ L'application vérifie les nouvelles versions au démarrage. Si trouvé:
 ### Manuel
 Exécutez `actualizar.bat` depuis le dossier d'installation
 
+## 💾 Résultats et Fichiers Enregistrés
+
+### Emplacement des Fichiers
+
+```
+GUARDADOS/
+├── REINO_results_20260602_143022.txt
+├── REINO_results_20260602_145015.txt
+└── REINO_results_20260603_101530.txt
+```
+
+### Format du Fichier
+
+```
+Nickname: Account_1
+Niveau Ville: 15
+Niveau Entrepôt: 18
+Nourriture: 45.0K
+Bois: 32.5K
+Pierre: 28.7K
+Or: 5.6K
+---
+Nickname: Account_2
+Niveau Ville: 15
+Niveau Entrepôt: 18
+Nourriture: 41.2K
+Bois: 35.1K
+Pierre: 26.8K
+Or: 6.1K
+---
+```
+
+### Comment Utiliser les Résultats
+
+1. Ouvrez le fichier `.txt` dans un éditeur
+2. Copiez les données dont vous avez besoin
+3. Collez dans votre outil de gestion
+4. Les surnoms sont générés automatiquement
+
+---
+
 ## 🆘 Dépannage
 
 ### "Impossible de détecter 4 valeurs"

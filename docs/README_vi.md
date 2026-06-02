@@ -87,6 +87,47 @@ Hai định dạng có sẵn:
 ### Thủ Công
 Chạy `actualizar.bat` từ thư mục cài đặt
 
+## 💾 Kết Quả và Tệp Đã Lưu
+
+### Vị Trí Tệp
+
+```
+GUARDADOS/
+├── REINO_results_20260602_143022.txt
+├── REINO_results_20260602_145015.txt
+└── REINO_results_20260603_101530.txt
+```
+
+### Định Dạng Tệp
+
+```
+Nickname: Account_1
+Cấp Thành Phố: 15
+Cấp Kho: 18
+Thức phẩm: 45.0K
+Gỗ: 32.5K
+Đá: 28.7K
+Vàng: 5.6K
+---
+Nickname: Account_2
+Cấp Thành Phố: 15
+Cấp Kho: 18
+Thức phẩm: 41.2K
+Gỗ: 35.1K
+Đá: 26.8K
+Vàng: 6.1K
+---
+```
+
+### Cách Sử Dụng Kết Quả
+
+1. Mở tệp `.txt` trong trình chỉnh sửa
+2. Sao chép dữ liệu bạn cần
+3. Dán vào công cụ quản lý của bạn
+4. Tên gợi ý được tạo tự động
+
+---
+
 ## 🆘 Khắc Phục Sự Cố
 
 ### "Không thể phát hiện 4 giá trị"

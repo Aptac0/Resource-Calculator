@@ -1496,14 +1496,22 @@ class ResourceExtractorApp:
                                     values.append(None)
                                 else:
                                     result = tot_num - (de_num or 0.0)
-                                    # Convertir de vuelta a formato shorthand
+                                    # Convertir de vuelta a formato shorthand (K, M, B)
                                     values.append(self.format_number_shorthand(result))
                             elif tipo == 'backpack':
-                                # Mantener el valor "De Objetos" en formato shorthand
-                                values.append(de_obj if de_obj else None)
+                                # Convertir "De Objetos" a formato shorthand (K, M, B)
+                                de_num = self.parse_shorthand_to_number(de_obj) if de_obj else None
+                                if de_num is None:
+                                    values.append(None)
+                                else:
+                                    values.append(self.format_number_shorthand(de_num))
                             else:  # tipo == 'totales'
-                                # Mantener el valor en formato shorthand (ej: 11.3M)
-                                values.append(tot if tot else None)
+                                # Convertir el total a formato shorthand (K, M, B)
+                                tot_num = self.parse_shorthand_to_number(tot) if tot else None
+                                if tot_num is None:
+                                    values.append(None)
+                                else:
+                                    values.append(self.format_number_shorthand(tot_num))
                         return (image_path, values)
                     else:
                         return (image_path, None)

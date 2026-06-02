@@ -192,18 +192,18 @@ GUARDADOS/
 Nickname: Account_1
 Nivel de ciudad: 15
 Nivel de depósito: 18
-Comida: 45000
-Madera: 32500
-Piedra: 28700
-Oro: 5600
+Comida: 45.0K
+Madera: 32.5K
+Piedra: 28.7K
+Oro: 5.6K
 ---
 Nickname: Account_2
 Nivel de ciudad: 15
 Nivel de depósito: 18
-Comida: 41200
-Madera: 35100
-Piedra: 26800
-Oro: 6100
+Comida: 41.2K
+Madera: 35.1K
+Piedra: 26.8K
+Oro: 6.1K
 ---
 ```
 

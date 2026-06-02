@@ -87,6 +87,47 @@ O aplicativo verifica novas versões ao iniciar. Se encontrado:
 ### Manual
 Execute `actualizar.bat` na pasta de instalação
 
+## 💾 Resultados e Arquivos Salvos
+
+### Localização dos Arquivos
+
+```
+GUARDADOS/
+├── REINO_results_20260602_143022.txt
+├── REINO_results_20260602_145015.txt
+└── REINO_results_20260603_101530.txt
+```
+
+### Formato do Arquivo
+
+```
+Nickname: Account_1
+Nível de Cidade: 15
+Nível de Armazém: 18
+Comida: 45.0K
+Madeira: 32.5K
+Pedra: 28.7K
+Ouro: 5.6K
+---
+Nickname: Account_2
+Nível de Cidade: 15
+Nível de Armazém: 18
+Comida: 41.2K
+Madeira: 35.1K
+Pedra: 26.8K
+Ouro: 6.1K
+---
+```
+
+### Como Usar os Resultados
+
+1. Abra o arquivo `.txt` no editor
+2. Copie os dados que você precisa
+3. Cole em sua ferramenta de gerenciamento
+4. Os nicknames são gerados automaticamente
+
+---
+
 ## 🆘 Solução de Problemas
 
 ### "Não foi possível detectar 4 valores"

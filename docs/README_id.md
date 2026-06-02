@@ -87,6 +87,47 @@ Aplikasi memeriksa versi baru saat startup. Jika ditemukan:
 ### Manual
 Jalankan `actualizar.bat` dari folder instalasi
 
+## 💾 Hasil dan File Tersimpan
+
+### Lokasi File
+
+```
+GUARDADOS/
+├── REINO_results_20260602_143022.txt
+├── REINO_results_20260602_145015.txt
+└── REINO_results_20260603_101530.txt
+```
+
+### Format File
+
+```
+Nickname: Account_1
+Level Kota: 15
+Level Gudang: 18
+Makanan: 45.0K
+Kayu: 32.5K
+Batu: 28.7K
+Emas: 5.6K
+---
+Nickname: Account_2
+Level Kota: 15
+Level Gudang: 18
+Makanan: 41.2K
+Kayu: 35.1K
+Batu: 26.8K
+Emas: 6.1K
+---
+```
+
+### Cara Menggunakan Hasil
+
+1. Buka file `.txt` di editor
+2. Salin data yang Anda butuhkan
+3. Tempel ke alat manajemen Anda
+4. Nama panggilan dibuat secara otomatis
+
+---
+
 ## 🆘 Pemecahan Masalah
 
 ### "Tidak dapat mendeteksi 4 nilai"

@@ -4,126 +4,288 @@
 
 ---
 
-## 📱 What is RSS STORE APTAC?
+## � Table of Contents
 
-Desktop application to automatically extract game resources from screenshots using OCR technology with intelligent account management.
+1. [Quick Guide](#-quick-guide)
+2. [How to Take Screenshots](#-how-to-take-screenshots)
+3. [Input Formats](#-input-formats)
+4. [Buttons and Functions](#-buttons-and-functions)
+5. [Results and Saved Files](#-results-and-saved-files)
+6. [Troubleshooting](#-troubleshooting)
+7. [Update System](#-update-system)
 
-## ✨ Features
+---
 
-- ✅ Automatic resource extraction with OCR
-- 🎯 Multi-language interface (6 languages supported)
-- 🔄 Automatic updates from GitHub
-- 📊 Batch processing (up to 100 images)
-- 💾 Export to TXT/CSV files
-- 🌍 All messages respect your language selection
+## 🚀 Quick Guide
 
-## 🚀 Quick Installation
+### Step by Step
 
-1. Download `RSS_STORE_APTAC_Installer.exe` from [Releases](https://github.com/Aptac0/Resource-Calculator/releases)
-2. Run the installer
-3. Done! The app will auto-update when new versions are available
+1. **Open the application**
+   - Run `RSS STORE APTAC.exe`
+   - Select language in main menu
 
-## 📖 User Guide
+2. **Add images**
+   - Click the `Add Images` button
+   - Select your screenshot captures
+   - Images load in the list
 
-### Quick Workflow
+3. **Configure kingdom**
+   - Choose the `Kingdom` from dropdown
+   - Available kingdoms update from GitHub
 
-1. **Open the application:** Run `RSS STORE APTAC.exe`
-2. **Add images:** Click "Add Images" and select your screenshots
-3. **Select kingdom:** Choose the appropriate kingdom from the dropdown
-4. **Configure numbers:**
+4. **Fill in numbers**
    - `Start number`: First account number (e.g., 1)
    - `End number`: Last account number (e.g., 30)
-   - `Blocked numbers`: (optional) Numbers to skip (e.g., 3,5,7)
-5. **Set levels:** Select "City Level" and "Warehouse Level" (1-25)
-6. **Process:** Click the resource button you need
+   - `Blocked numbers` (optional): Accounts to skip (e.g., 3,5,7)
 
-### How to Take Screenshots
+5. **Set levels**
+   - `City Level`: Market Shop level (1–25)
+   - `Warehouse Level`: Storage level (1–25)
 
-#### From PC (Recommended)
-- Open the game in windowed mode
-- Take a clear screenshot of the Resources window
-- Ensure numbers and labels are readable
+6. **Process resources**
+   - Click the resource button you need:
+     - `Total Resources`: Total per account
+     - `Account Resources`: Net values
+     - `Backpack Resources`: Inventory only
+
+7. **Find results**
+   - Auto-saved to `GUARDADOS/`
+   - Name: `KINGDOM_results_YYYYMMDD_HHMMSS.txt`
+
+## 📸 How to Take Screenshots
+
+### From PC (Recommended)
+
+✅ **Correct way:**
+- Open game in windowed mode
+- Capture Resources window clearly
+- Ensure numbers are not cut off
+- Image must be sharp without shadows
 
 ![Screenshot from PC](../Ejemplos/Foto-desde-PC.png)
 
-#### From Mobile
-- Transfer the image to your PC (USB, Google Drive, etc.)
-- Avoid angled or blurry photos
-- Ensure the image is sharp and clear
+**Tips:**
+- Use Windows screenshot tool (Win + Shift + S)
+- Include only the resources dialog
+- Numbers and labels must be readable
+
+### From Mobile
+
+⚠️ **Important:**
+1. Take screenshot on mobile
+2. **Transfer to PC** (USB, Google Drive, Telegram, etc.)
+3. Avoid angled or blurry photos
+4. Screenshot must be sharp and clear
 
 ![Screenshot from Mobile](../Ejemplos/Foto-desde-Movil.png)
 
-### Input Formats
+**Recommendations:**
+- Use native mobile screenshot (better than photo)
+- Good lighting
+- No reflections or shadows
+- Transfer without compression
 
-#### Start and End Numbers
-- Numbers only (e.g., `1` and `30`)
-- Must be valid positive integers
+## 🔢 Input Formats
 
-#### Blocked Numbers (Optional)
-Two available formats:
-- **Range:** `1-10` (all numbers from 1 to 10)
-- **List:** `1,3,5,7` (specific numbers)
-- **Mixed:** `1-5,8,10-15`
+### Start Number and End Number
 
-**Examples:**
-- `start=1`, `end=10`, `blocked=3,5` → processes: 1,2,4,6,7,8,9,10
-- The app validates that you have enough images
+- **Numbers only**: `1` to `30` (e.g., start=1, end=30)
+- **Must be positive integers**
+- **Number of images must match** valid accounts
 
-#### Levels
-- `City Level` (Market): 1-25
+### Blocked Numbers (Optional)
+
+**Two formats allowed:**
+
+**Format 1: Range**
+```
+1-10      → 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+3-5       → 3, 4, 5
+```
+
+**Format 2: List**
+```
+1,3,5,7   → 1, 3, 5, 7
+3, 5, 8   → 3, 5, 8 (spaces allowed)
+```
+
+**Format 3: Mixed**
+```
+1-5,8,10-15  → 1, 2, 3, 4, 5, 8, 10, 11, 12, 13, 14, 15
+```
+
+### Practical Example
+
+| Field | Value | Result |
+|-------|-------|--------|
+| Start | 1 | Account 1 |
+| End | 10 | Account 10 |
+| Blocked | 3,5 | Processes: 1,2,4,6,7,8,9,10 |
+| Images | 8 | ✅ Valid (matches) |
+
+⚠️ If number of images ≠ valid accounts, you'll see an error.
+
+### Levels
+
+- `City Level` (Market Shop): 1-25
 - `Warehouse Level` (Storage): 1-25
 
-![Market Levels](../Ejemplos/Niveles-Puesto-de-Venta.png)
-![Warehouse Levels](../Ejemplos/Niveles-de-Almacen.png)
+![Market Shop Levels](../Ejemplos/Niveles-Puesto-de-Venta.png)
+![Storage Levels](../Ejemplos/Niveles-de-Almacen.png)
 
-## 🔄 Update System
+## 🎯 Buttons and Functions
 
-### Automatic
-The app checks for new versions on startup. If found:
-- You'll get a notification
-- Download directly from the app
-- Automatic installation
+### Add Images
+- Opens file selector
+- Select multiple captures
+- Adds to processing list
 
-### Manual
-Run `actualizar.bat` from the installation folder
+### Clear List
+- Empties all loaded images
+- Removes temporary data
+- Useful for starting a new batch
+
+### New Window
+- Opens another app instance
+- Useful for multiple tasks
+
+### Update GitHub
+- Downloads latest `kingdoms/` and `Iconos/` from repo
+- Overwrites local data
+- If using .exe, shows releases page for new installer
+
+### Total Resources
+- Processes images for each account
+- Saves: Food, Wood, Stone, Gold amounts
+- Shows total per account
+- Useful for inventory tracking
+
+### Account Resources
+- Calculates net resources (total - inventory)
+- Subtracts backpack items
+- Shows actual account resources
+- Better for account management
+
+### Backpack Resources
+- Shows only inventory items
+- Extracts "from objects" values
+- Useful for packing analysis
+
+## 💾 Results and Saved Files
+
+### File Location
+
+```
+GUARDADOS/
+├── KINGDOM_results_20260602_143022.txt
+├── KINGDOM_results_20260602_145015.txt
+└── KINGDOM_results_20260603_101530.txt
+```
+
+### File Format
+
+```
+Nickname: Account_1
+City Level: 15
+Warehouse Level: 18
+Food: 45.0K
+Wood: 32.5K
+Stone: 28.7K
+Gold: 5.6K
+---
+Nickname: Account_2
+City Level: 15
+Warehouse Level: 18
+Food: 41.2K
+Wood: 35.1K
+Stone: 26.8K
+Gold: 6.1K
+---
+```
+
+### How to Use Results
+
+1. Open the `.txt` file in editor
+2. Copy the data you need
+3. Paste into your management tool
+4. Nicknames generate automatically
+
+---
 
 ## 🆘 Troubleshooting
 
 ### "Could not detect 4 values"
-- Ensure the screenshot is clear and readable
-- Numbers must be visible
-- Try taking another clearer screenshot
+- Screenshot quality issue - try clearer image
+- Numbers must be clearly visible
+- Try recropping or retaking screenshot
+- Adjust brightness if numbers are dark
+
+### "Error: X images selected but Y valid accounts"
+- Number of images doesn't match valid accounts
+- Check start/end numbers and blocked numbers
+- Use the formula: (end - start + 1) - blocked = total needed
+- Add or remove images to match
 
 ### "Update error"
-- Check your Internet connection
+- Check internet connection
 - Try again in a few minutes
-- If it persists, restart the application
+- Restart the application if error persists
+- Check firewall settings
 
-### Images are not processing
-- Verify you selected a kingdom
-- Check that numbers are valid
-- Ensure you have enough images
+### Images won't process
+- Verify kingdom is selected
+- Check all number fields are filled
+- Ensure image count matches expected accounts
+- Try previewing image first to check OCR quality
+
+### "Cannot open window"
+- Another instance may be running
+- Close existing windows and retry
+- Try running as Administrator
+
+---
+
+## 🔄 Update System
+
+### Automatic Updates
+
+The application checks for new versions when starting. If found:
+- Notification appears
+- Download directly from app
+- Auto-installs
+- App restarts with latest version
+
+### Manual Update
+
+Run `actualizar.bat` from installation folder
+
+---
 
 ## 📞 Support
 
 - **GitHub:** https://github.com/Aptac0/Resource-Calculator
-- **Issues:** https://github.com/Aptac0/Resource-Calculator/issues
+- **Report Issues:** https://github.com/Aptac0/Resource-Calculator/issues
 - **Releases:** https://github.com/Aptac0/Resource-Calculator/releases
+
+---
 
 ## 📝 System Requirements
 
 - Windows 10 or later
-- No need to install Python
+- No Python installation needed
 - Internet connection (for updates)
 - Tesseract OCR (included in installer)
+- ~300MB disk space
 
-## 🔐 Privacy
+## 🔐 Privacy & Security
 
 The application:
 - ✅ Works completely offline
-- ✅ Never sends your images to any server
-- ✅ No registration or account required
+- ✅ Never sends images to any server
+- ✅ No account registration required
 - ✅ Your data stays on your computer
+- ✅ Open source code
+- ✅ No telemetry or tracking
 
 ---
 
