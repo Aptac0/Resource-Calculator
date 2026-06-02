@@ -130,6 +130,7 @@ class ResourceExtractorApp:
             
             # Ahora copiar TODA la estructura nueva
             files_copied = 0
+            dirs_created = {}
             for src_file in pending_dir.rglob('*'):
                 if src_file.is_file():
                     rel_path = src_file.relative_to(pending_dir)
@@ -140,17 +141,37 @@ class ResourceExtractorApp:
                         continue
                     
                     # Crear directorio si no existe
-                    dst_file.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        dst_file.parent.mkdir(parents=True, exist_ok=True)
+                    except Exception as e:
+                        print(f"ADVERTENCIA al crear directorio {dst_file.parent}: {e}")
                     
                     # Copiar archivo
                     try:
                         shutil.copy2(src_file, dst_file)
-                        print(f"DEBUG: Actualizado: {rel_path}")
+                        # Rastrear que se copio
+                        top_dir = str(rel_path.parts[0]) if rel_path.parts else ''
+                        if top_dir not in dirs_created:
+                            dirs_created[top_dir] = 0
+                        dirs_created[top_dir] += 1
                         files_copied += 1
+                        if top_dir == 'kingdoms':
+                            print(f"DEBUG: Archivo reino copiado: {rel_path}")
                     except Exception as e:
                         print(f"ADVERTENCIA al copiar {rel_path}: {e}")
             
-            print(f"DEBUG: Se copiaron {files_copied} archivos")
+            print(f"DEBUG: Se copiaron {files_copied} archivos totales")
+            print(f"DEBUG: Desglose por carpeta: {dirs_created}")
+            
+            # Validar que se copiaron los reinos
+            kingdoms_dir = app_data_dir / 'kingdoms'
+            if kingdoms_dir.exists():
+                reino_files = list(kingdoms_dir.glob('*.txt'))
+                print(f"DEBUG: Reinos en AppData despues de actualizar: {len(reino_files)} archivos")
+                for rf in reino_files:
+                    print(f"  - {rf.name}")
+            else:
+                print(f"ADVERTENCIA: No existe directorio kingdoms en {kingdoms_dir}")
             
             # Eliminar carpeta temporal de actualizaciones
             try:
@@ -1028,15 +1049,27 @@ class ResourceExtractorApp:
         kdir = self._resolve_path('kingdoms')
         vals = []
         try:
+            print(f"DEBUG: Buscando reinos en: {kdir}")
+            print(f"DEBUG: Existe? {kdir.exists()}")
             if kdir.exists() and kdir.is_dir():
                 for p in sorted(kdir.glob('*.txt')):
                     vals.append(p.name)
-        except Exception:
+                    print(f"DEBUG: Encontrado reino: {p.name}")
+        except Exception as e:
+            print(f"ERROR en _populate_reinos: {e}")
+            import traceback
+            traceback.print_exc()
             vals = []
+        
+        print(f"DEBUG: Reinos totales encontrados: {len(vals)} - {vals}")
+        
         self.reino_combobox['values'] = vals
         if vals:
             self.reino_combobox.set(vals[0])
             self.kingdom_template_path = str(kdir / vals[0])
+            print(f"DEBUG: Combobox actualizado. Seleccionado: {vals[0]}")
+        else:
+            print(f"ADVERTENCIA: No se encontraron reinos en {kdir}")
 
     def _on_reino_selected(self):
         sel = self.reino_combobox.get()
@@ -1124,20 +1157,22 @@ class ResourceExtractorApp:
             self._apply_pending_updates()
             
             print("DEBUG: Actualizaciones aplicadas. Recargando reinos...")
-            # Recargar los reinos desde AppData
-            self.root.after(0, lambda: self._populate_reinos())
+            # Recargar los reinos desde AppData en el hilo principal
+            self.root.after(100, lambda: self._populate_reinos())
+            # Dar tiempo para que se actualice la GUI
+            self.root.after(200, lambda: self.root.update_idletasks())
             
-            self.root.after(0, lambda: messagebox.showinfo(
-                "Actualización completada", 
+            self.root.after(300, lambda: messagebox.showinfo(
+                "Actualizacion completada", 
                 "✓ Los archivos se han actualizado correctamente.\n\n"
-                "Los nuevos reinos y cambios están disponibles ahora."
+                "Los nuevos reinos y cambios estan disponibles ahora."
             ))
         except Exception as e:
             error_msg = str(e)
-            print(f"ERROR en actualización: {error_msg}")
+            print(f"ERROR en actualizacion: {error_msg}")
             import traceback
             traceback.print_exc()
-            self.root.after(0, lambda error_msg=error_msg: messagebox.showerror("Error", f"No se pudo completar la actualización: {error_msg}"))
+            self.root.after(0, lambda error_msg=error_msg: messagebox.showerror("Error", f"No se pudo completar la actualizacion: {error_msg}"))
         finally:
             self.root.after(0, lambda: self.update_btn.config(state=tk.NORMAL, text=_("update_github")))
 
