@@ -434,12 +434,29 @@ class ResourceExtractorApp:
 
         img_proc = self.preprocess_image_for_ocr(img)
 
+        # Configurar tesseract si es necesario
+        try:
+            if not getattr(pytesseract.pytesseract, 'tesseract_cmd', None):
+                # Intentar encontrar tesseract en rutas comunes
+                possible_paths = [
+                    r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+                    r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+                    self._resolve_path('Tesseract-OCR', 'tesseract.exe')
+                ]
+                for path in possible_paths:
+                    if Path(path).exists():
+                        pytesseract.pytesseract.tesseract_cmd = str(path)
+                        break
+        except Exception as e:
+            print(f"Error configurando tesseract: {e}")
+
         # Quitar la whitelist para permitir lectura de letras (nombres de recurso)
         tconfig = r'--oem 3 --psm 6'
         try:
             data = pytesseract.image_to_data(img_proc, output_type=pytesseract.Output.DICT, config=tconfig)
         except Exception as e:
             print("Error pytesseract.image_to_data:", e)
+            # Retornar vacío si falla
             return []
 
         texts = data.get('text', [])
@@ -748,6 +765,7 @@ class ResourceExtractorApp:
     def _save_results_file(self, default_filename):
         default_dir = self._get_default_save_dir()
         initial_path = default_dir / default_filename
+        
         fp = filedialog.asksaveasfilename(
             defaultextension=".txt",
             filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
@@ -755,8 +773,11 @@ class ResourceExtractorApp:
             initialfile=default_filename,
             title="Guardar resultados de recursos"
         )
+        
+        # Si el usuario canceló, usar la ruta por defecto
         if not fp:
             fp = str(initial_path)
+        
         try:
             with open(fp, 'w', encoding='utf-8') as f:
                 for idx, e in enumerate(self.output_entries, start=1):
@@ -956,21 +977,23 @@ class ResourceExtractorApp:
     def open_new_window(self):
         # Spawn a new process running the same script so user can open multiple independent GUIs
         try:
-            install_base = self._get_install_base()
-            python = sys.executable
-            # Si está empaquetado, usar el ejecutable directamente
             if getattr(sys, 'frozen', False):
-                script = str(sys.executable)
+                # Si está empaquetado, ejecutar el exe directamente
+                subprocess.Popen([sys.executable])
             else:
+                # Si está en desarrollo, ejecutar con python
+                python = sys.executable
                 script = str(Path(__file__).resolve())
-            subprocess.Popen([python, script], cwd=str(install_base))
+                subprocess.Popen([python, script])
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo abrir nueva ventana: {e}")
 
     def update_from_github(self):
         if not messagebox.askyesno("Actualizar", "¿Deseas obtener las últimas actualizaciones?"):
             return
-        threading.Thread(target=self._update_from_github_thread, daemon=True).start()
+        # Usar un hilo independiente sin daemon
+        thread = threading.Thread(target=self._update_from_github_thread, daemon=False)
+        thread.start()
 
     def _update_from_github_thread(self):
         self.root.after(0, lambda: self.update_btn.config(state=tk.DISABLED, text="Descargando..."))
@@ -979,7 +1002,9 @@ class ResourceExtractorApp:
             self.root.after(0, lambda: self._populate_reinos())
             self.root.after(0, lambda: messagebox.showinfo("Actualización completa", "Los reinos y recursos se han sincronizado correctamente."))
         except Exception as e:
-            self.root.after(0, lambda: messagebox.showerror("Error", f"No se pudo completar la actualización: {e}"))
+            error_msg = str(e)
+            print(f"Error en actualización: {error_msg}")
+            self.root.after(0, lambda error_msg=error_msg: messagebox.showerror("Error", f"No se pudo completar la actualización: {error_msg}"))
         finally:
             self.root.after(0, lambda: self.update_btn.config(state=tk.NORMAL, text=_("update_github")))
 
@@ -1225,7 +1250,8 @@ class ResourceExtractorApp:
                     
                     # Nombre del archivo: Reino_boton-fecha.txt (sin código de idioma)
                     default_filename = f"{reino_name}_{tipo_name}-{date_str}.txt"
-                    self.root.after(0, lambda default_filename=default_filename: self._save_results_file(default_filename))
+                    # Llamar directamente desde el hilo principal
+                    self.root.after(100, lambda default_filename=default_filename: self._save_results_file(default_filename))
                 except Exception as e:
                     err_msg = f"No se pudo guardar el archivo: {e}"
                     self.root.after(0, lambda err_msg=err_msg: messagebox.showerror("Error", err_msg))
