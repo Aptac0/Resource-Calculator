@@ -1067,35 +1067,45 @@ class ResourceExtractorApp:
             log_dir = appdata / 'RSS STORE APTAC'
             log_dir.mkdir(parents=True, exist_ok=True)
             log_file = log_dir / 'update_debug.log'
-        except:
+        except Exception as e:
             # Fallback: usar archivo temporal
             log_file = Path(tempfile.gettempdir()) / 'rss_update_debug.log'
+            print(f"Advertencia: No se pudo crear carpeta AppData: {e}")
         
         def log_msg(msg):
             try:
-                with open(log_file, 'a') as f:
+                with open(log_file, 'a', encoding='utf-8') as f:
                     f.write(f"[{datetime.now()}] {msg}\n")
-            except:
-                pass  # Silenciosamente ignorar errores de log
+            except Exception as e:
+                print(f"[LOG ERROR] No se pudo escribir log: {e}")
             print(msg)
         
         # Limpiar log anterior
         try:
-            log_file.unlink()
-        except:
-            pass
+            if log_file.exists():
+                log_file.unlink()
+        except Exception as e:
+            log_msg(f"Advertencia: No se pudo limpiar log anterior: {e}")
         
         log_msg("===== INICIANDO DESCARGA DE GITHUB =====")
         log_msg(f"URL: {url}")
+        log_msg(f"Instalación en: {install_base}")
+        log_msg(f"Log en: {log_file}")
         
         # Limpiar carpeta de actualizaciones pendientes anterior (si existe)
         if pending_dir.exists():
             try:
                 shutil.rmtree(pending_dir)
-            except:
-                pass
+                log_msg(f"Carpeta temporal anterior limpiada")
+            except Exception as e:
+                log_msg(f"Advertencia al limpiar carpeta temporal: {e}")
         
-        pending_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            pending_dir.mkdir(parents=True, exist_ok=True)
+            log_msg(f"Carpeta temporal creada: {pending_dir}")
+        except Exception as e:
+            log_msg(f"ERROR: No se pudo crear carpeta temporal: {e}")
+            raise Exception(f"No se pudo crear carpeta temporal: {e}")
         
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_zip = Path(tmpdir) / 'repo.zip'
