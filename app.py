@@ -94,20 +94,49 @@ class ResourceExtractorApp:
             pending_dir = Path(tempfile.gettempdir()) / 'rss_update_pending'
         
         if not pending_dir.exists():
+            print(f"DEBUG: No hay carpeta de actualizaciones pendientes en {pending_dir}")
             return
         
+        print(f"DEBUG: Encontrada carpeta de actualizaciones en {pending_dir}")
+        
         try:
-            install_base = self._get_install_base()
-            # Copiar todos los archivos desde _update_pending al directorio raíz
+            # Copiar archivos actualizados de _update_pending a app_data_dir
+            # (guardar en AppData, no en Program Files que requiere admin)
+            app_data_dir = Path(os.environ.get('APPDATA', Path.home() / 'AppData' / 'Roaming')) / 'RSS STORE APTAC'
+            app_data_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Primero, identificar qué carpetas/archivos vamos a actualizar
+            # Para hacer reemplazo COMPLETO: eliminar subcarpetas que vamos a actualizar
+            subdirs_to_update = set()
             for src_file in pending_dir.rglob('*'):
                 if src_file.is_file():
                     rel_path = src_file.relative_to(pending_dir)
-                    dst_file = install_base / rel_path
+                    # Extraer la primera carpeta del path (ej: "kingdoms/4107.txt" -> "kingdoms")
+                    if len(rel_path.parts) > 1:
+                        top_dir = rel_path.parts[0]
+                        subdirs_to_update.add(top_dir)
+            
+            print(f"DEBUG: Carpetas a actualizar completamente: {subdirs_to_update}")
+            
+            # Eliminar las carpetas antiguas que vamos a reemplazar
+            for subdir in subdirs_to_update:
+                old_dir = app_data_dir / subdir
+                if old_dir.exists():
+                    try:
+                        shutil.rmtree(old_dir)
+                        print(f"DEBUG: Eliminada carpeta antigua: {subdir}")
+                    except Exception as e:
+                        print(f"ADVERTENCIA: No se pudo eliminar {subdir}: {e}")
+            
+            # Ahora copiar TODA la estructura nueva
+            files_copied = 0
+            for src_file in pending_dir.rglob('*'):
+                if src_file.is_file():
+                    rel_path = src_file.relative_to(pending_dir)
+                    dst_file = app_data_dir / rel_path
                     
-                    # No sobrescribir archivos protegidos
+                    # No sobrescribir logs
                     if dst_file.name in {'update_debug.log'}:
-                        continue
-                    if rel_path.parts and rel_path.parts[0] in {'GUARDADOS', 'output'}:
                         continue
                     
                     # Crear directorio si no existe
@@ -116,23 +145,42 @@ class ResourceExtractorApp:
                     # Copiar archivo
                     try:
                         shutil.copy2(src_file, dst_file)
+                        print(f"DEBUG: Actualizado: {rel_path}")
+                        files_copied += 1
                     except Exception as e:
-                        print(f"Advertencia al copiar {rel_path}: {e}")
+                        print(f"ADVERTENCIA al copiar {rel_path}: {e}")
             
-            # Eliminar carpeta de actualizaciones pendientes
+            print(f"DEBUG: Se copiaron {files_copied} archivos")
+            
+            # Eliminar carpeta temporal de actualizaciones
             try:
                 shutil.rmtree(pending_dir)
-                print("Actualizaciones aplicadas correctamente")
+                print(f"DEBUG: Actualizaciones aplicadas correctamente. Carpeta {pending_dir} eliminada.")
             except Exception as e:
-                print(f"Advertencia al limpiar carpeta temporal: {e}")
+                print(f"ADVERTENCIA al limpiar carpeta temporal: {e}")
         except Exception as e:
-            print(f"Error aplicando actualizaciones pendientes: {e}")
+            print(f"ERROR aplicando actualizaciones pendientes: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _resolve_path(self, *parts):
+        # Primero intentar buscar en AppData (actualizaciones descargadas)
+        try:
+            appdata = Path(os.environ.get('APPDATA', Path.home() / 'AppData' / 'Roaming'))
+            app_data_dir = appdata / 'RSS STORE APTAC'
+            candidate = app_data_dir.joinpath(*parts)
+            if candidate.exists():
+                return candidate
+        except Exception:
+            pass
+        
+        # Luego en install_base
         install_base = self._get_install_base()
         candidate = install_base.joinpath(*parts)
         if candidate.exists():
             return candidate
+        
+        # Finalmente en data_base
         data_base = self._get_data_base()
         return data_base.joinpath(*parts)
 
@@ -487,8 +535,8 @@ class ResourceExtractorApp:
         try:
             img = Image.open(image_path)
         except Exception as e:
-            print("No se pudo abrir imagen:", image_path, e)
-            return []
+            print(f"ERROR: No se pudo abrir imagen: {image_path}, {e}")
+            return [], [], None
 
         img_proc = self.preprocess_image_for_ocr(img)
 
@@ -499,23 +547,36 @@ class ResourceExtractorApp:
                 possible_paths = [
                     r'C:\Program Files\Tesseract-OCR\tesseract.exe',
                     r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
-                    self._resolve_path('Tesseract-OCR', 'tesseract.exe')
+                    str(self._resolve_path('Tesseract-OCR', 'tesseract.exe'))
                 ]
+                found_tesseract = False
                 for path in possible_paths:
-                    if Path(path).exists():
-                        pytesseract.pytesseract.tesseract_cmd = str(path)
-                        break
+                    try:
+                        if Path(path).exists():
+                            pytesseract.pytesseract.tesseract_cmd = str(path)
+                            print(f"DEBUG: Tesseract encontrado en: {path}")
+                            found_tesseract = True
+                            break
+                    except Exception:
+                        pass
+                if not found_tesseract:
+                    print(f"ADVERTENCIA: Tesseract no encontrado en rutas conocidas. Rutas buscadas: {possible_paths}")
         except Exception as e:
-            print(f"Error configurando tesseract: {e}")
+            print(f"ERROR configurando tesseract: {e}")
 
         # Quitar la whitelist para permitir lectura de letras (nombres de recurso)
         tconfig = r'--oem 3 --psm 6'
         try:
+            print(f"DEBUG: Llamando pytesseract con config: {tconfig}")
+            print(f"DEBUG: tesseract_cmd = {pytesseract.pytesseract.tesseract_cmd}")
             data = pytesseract.image_to_data(img_proc, output_type=pytesseract.Output.DICT, config=tconfig)
+            print(f"DEBUG: OCR completado. Entries: {len(data.get('text', []))}")
         except Exception as e:
-            print("Error pytesseract.image_to_data:", e)
+            print(f"ERROR pytesseract.image_to_data: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
             # Retornar vacío si falla
-            return []
+            return [], [], None
 
         texts = data.get('text', [])
         confs = data.get('conf', [])
@@ -1057,15 +1118,25 @@ class ResourceExtractorApp:
         self.root.after(0, lambda: self.update_btn.config(state=tk.DISABLED, text="Descargando..."))
         try:
             self._download_repo_resources()
+            print("DEBUG: Descarga completada. Aplicando actualizaciones...")
+            
+            # Aplicar los archivos descargados INMEDIATAMENTE
+            self._apply_pending_updates()
+            
+            print("DEBUG: Actualizaciones aplicadas. Recargando reinos...")
+            # Recargar los reinos desde AppData
             self.root.after(0, lambda: self._populate_reinos())
+            
             self.root.after(0, lambda: messagebox.showinfo(
                 "Actualización completada", 
-                "Los archivos se han descargado correctamente.\n\n"
-                "Por favor, REINICIA LA APLICACIÓN para aplicar los cambios."
+                "✓ Los archivos se han actualizado correctamente.\n\n"
+                "Los nuevos reinos y cambios están disponibles ahora."
             ))
         except Exception as e:
             error_msg = str(e)
-            print(f"Error en actualización: {error_msg}")
+            print(f"ERROR en actualización: {error_msg}")
+            import traceback
+            traceback.print_exc()
             self.root.after(0, lambda error_msg=error_msg: messagebox.showerror("Error", f"No se pudo completar la actualización: {error_msg}"))
         finally:
             self.root.after(0, lambda: self.update_btn.config(state=tk.NORMAL, text=_("update_github")))
@@ -1320,8 +1391,20 @@ class ResourceExtractorApp:
             self._update_progress(100)
             time.sleep(0.25)
 
-            if not getattr(self, 'output_entries', None):
-                self.root.after(0, lambda: messagebox.showwarning("Advertencia", "No se encontraron datos procesables en las imágenes"))
+            # Verificar si al menos un archivo fue procesado exitosamente
+            has_valid_entries = any(e is not None for e in self.output_entries)
+            
+            print(f"DEBUG: output_entries = {self.output_entries}")
+            print(f"DEBUG: has_valid_entries = {has_valid_entries}")
+            print(f"DEBUG: failed_images = {self.failed_images}")
+            
+            if not has_valid_entries:
+                error_detail = f"Se procesaron {len(self.selected_images)} imágenes pero TODAS fallaron."
+                if self.failed_images:
+                    error_detail += f"\n\nImágenes que fallaron: {', '.join(self.failed_images[:5])}"
+                    if len(self.failed_images) > 5:
+                        error_detail += f"... y {len(self.failed_images) - 5} más"
+                self.root.after(0, lambda error_detail=error_detail: messagebox.showerror("Error", error_detail))
             else:
                 try:
                     # Obtener nombre del reino y limpiar la extensión .txt si la tiene
