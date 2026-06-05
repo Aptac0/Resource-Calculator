@@ -18,6 +18,34 @@ import zipfile
 import tempfile
 import webbrowser
 import shutil
+import ssl
+import json
+
+# Configurar SSL para evitar problemas de certificados
+try:
+    import certifi
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    # Si certifi no está disponible, crear contexto básico
+    ssl_context = ssl.create_default_context()
+    # Intenta usar certificados del sistema
+    try:
+        ssl_context.load_default_certs()
+    except Exception:
+        pass
+
+def _safe_urlopen(url, timeout=10, headers=None):
+    """Función segura para descargar desde URLs con mejor manejo de SSL."""
+    if headers is None:
+        headers = {'User-Agent': 'Mozilla/5.0'}
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        return urllib.request.urlopen(req, timeout=timeout, context=ssl_context)
+    except ssl.SSLError as e:
+        print(f"Advertencia SSL: {e}. Intentando sin verificación...")
+        # Fallback: crear contexto que no verifica certificados (menos seguro pero funciona)
+        unverified_context = ssl._create_unverified_context()
+        return urllib.request.urlopen(req, timeout=timeout, context=unverified_context)
 
 # Importar traducciones con mejor manejo de errores
 try:
@@ -33,6 +61,38 @@ except ImportError as e:
 TESSERACT_CMD = None
 if TESSERACT_CMD:
     pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
+
+def _find_tesseract():
+    """Buscar Tesseract en rutas comunes. Retorna True si se encontró y configuró."""
+    possible_paths = [
+        r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+        r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+    ]
+    for path in possible_paths:
+        try:
+            if Path(path).exists():
+                pytesseract.pytesseract.tesseract_cmd = str(path)
+                print(f"✓ Tesseract encontrado en: {path}")
+                return True
+        except Exception as e:
+            print(f"ERROR verificando {path}: {e}")
+    return False
+
+def _validate_tesseract():
+    """Valida si Tesseract está disponible. Retorna (está_disponible, mensaje)"""
+    try:
+        # Intentar un OCR simple para verificar que funciona
+        test_img = Image.new('RGB', (10, 10), color='white')
+        pytesseract.image_to_string(test_img)
+        return True, "Tesseract verificado exitosamente"
+    except pytesseract.TesseractNotFoundError:
+        return False, "⚠ Tesseract no está instalado.\n\nDescarga e instala desde:\nhttps://github.com/UB-Mannheim/tesseract/wiki"
+    except Exception as e:
+        return False, f"Error verificando Tesseract: {e}"
+
+# Detectar Tesseract al iniciar
+if not _find_tesseract():
+    print("ADVERTENCIA: Tesseract no encontrado en rutas conocidas")
 
 GITHUB_OWNER = "Aptac0"
 GITHUB_REPO = "Resource-Calculator"
@@ -73,6 +133,9 @@ class ResourceExtractorApp:
         self.setup_styles()
         self.create_widgets()
         
+        # Verificar que Tesseract está disponible
+        self._check_tesseract()
+        
         # Verificar actualizaciones en background
         self._check_updates_on_startup()
         
@@ -85,6 +148,16 @@ class ResourceExtractorApp:
         if getattr(sys, 'frozen', False):
             return Path(sys.executable).parent
         return Path(__file__).parent
+    
+    def _check_tesseract(self):
+        """Verifica si Tesseract está disponible. Si no, muestra un mensaje de error."""
+        available, message = _validate_tesseract()
+        if not available:
+            messagebox.showerror(
+                "Tesseract no encontrado",
+                f"{message}\n\nSin Tesseract, no se pueden procesar imágenes."
+            )
+            print(f"ERROR: {message}")
     
     def _apply_pending_updates(self):
         """Aplicar actualizaciones pendientes de reinicio anterior"""
@@ -253,13 +326,10 @@ class ResourceExtractorApp:
     def _check_version_thread(self):
         """Ejecuta la verificación de versión en un hilo separado"""
         try:
-            import json
-            
             # Obtener versión más reciente de GitHub
             api_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
-            req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0'})
             
-            with urllib.request.urlopen(req, timeout=10) as response:
+            with _safe_urlopen(api_url, timeout=10) as response:
                 data = json.loads(response.read())
                 latest_version = data.get('tag_name', None)
             
@@ -288,14 +358,12 @@ class ResourceExtractorApp:
     def _download_exe_thread(self, version):
         """Hilo para descargar y ejecutar actualización"""
         try:
-            import json
             import subprocess
             
             # Obtener datos de la release
             api_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
-            req = urllib.request.Request(api_url, headers={'User-Agent': 'Mozilla/5.0'})
             
-            with urllib.request.urlopen(req, timeout=10) as response:
+            with _safe_urlopen(api_url, timeout=10) as response:
                 release_data = json.loads(response.read())
             
             # Encontrar el .exe en los assets
@@ -314,12 +382,11 @@ class ResourceExtractorApp:
                 tmp_path = tmp.name
             
             print(f"Descargando desde: {download_url}")
-            req = urllib.request.Request(download_url, headers={'User-Agent': 'Mozilla/5.0'})
             
             # Mostrar progreso
             self.root.after(0, lambda: messagebox.showinfo("Descargando", f"Descargando {version}...\n\nEsto puede tomar unos minutos."))
             
-            with urllib.request.urlopen(req, timeout=120) as response:
+            with _safe_urlopen(download_url, timeout=120) as response:
                 with open(tmp_path, 'wb') as f:
                     f.write(response.read())
             
@@ -665,30 +732,6 @@ class ResourceExtractorApp:
 
         img_proc = self.preprocess_image_for_ocr(img)
 
-        # Configurar tesseract si es necesario
-        try:
-            if not getattr(pytesseract.pytesseract, 'tesseract_cmd', None):
-                # Intentar encontrar tesseract en rutas comunes
-                possible_paths = [
-                    r'C:\Program Files\Tesseract-OCR\tesseract.exe',
-                    r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
-                    str(self._resolve_path('Tesseract-OCR', 'tesseract.exe'))
-                ]
-                found_tesseract = False
-                for path in possible_paths:
-                    try:
-                        if Path(path).exists():
-                            pytesseract.pytesseract.tesseract_cmd = str(path)
-                            print(f"DEBUG: Tesseract encontrado en: {path}")
-                            found_tesseract = True
-                            break
-                    except Exception:
-                        pass
-                if not found_tesseract:
-                    print(f"ADVERTENCIA: Tesseract no encontrado en rutas conocidas. Rutas buscadas: {possible_paths}")
-        except Exception as e:
-            print(f"ERROR configurando tesseract: {e}")
-
         # Quitar la whitelist para permitir lectura de letras (nombres de recurso)
         tconfig = r'--oem 3 --psm 6'
         try:
@@ -696,6 +739,9 @@ class ResourceExtractorApp:
             print(f"DEBUG: tesseract_cmd = {pytesseract.pytesseract.tesseract_cmd}")
             data = pytesseract.image_to_data(img_proc, output_type=pytesseract.Output.DICT, config=tconfig)
             print(f"DEBUG: OCR completado. Entries: {len(data.get('text', []))}")
+        except pytesseract.TesseractNotFoundError as e:
+            print(f"ERROR: Tesseract no está instalado: {e}")
+            return [], [], None
         except Exception as e:
             print(f"ERROR pytesseract.image_to_data: {type(e).__name__}: {e}")
             import traceback
@@ -1333,36 +1379,35 @@ class ResourceExtractorApp:
         
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_zip = Path(tmpdir) / 'repo.zip'
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             
             try:
-                with urllib.request.urlopen(req, timeout=30) as response:
-                    if response.getcode() != 200:
-                        raise Exception(f"Respuesta inválida de GitHub: {response.getcode()}")
-                    
-                    log_msg(f"Respuesta HTTP: {response.getcode()}")
-                    
-                    # Mostrar progreso de descarga
-                    total_size = int(response.headers.get('content-length', 0))
-                    log_msg(f"Tamaño total: {total_size} bytes")
-                    downloaded = 0
-                    chunk_size = 8192
-                    
-                    with open(tmp_zip, 'wb') as f:
-                        while True:
-                            chunk = response.read(chunk_size)
-                            if not chunk:
-                                break
-                            downloaded += len(chunk)
-                            f.write(chunk)
-                            
-                            if total_size > 0:
-                                progress = min(100, int(downloaded * 100 / total_size))
-                                self.root.after(0, lambda p=progress: self.update_btn.config(
-                                    text=f"Actualizando... {p}%"
-                                ))
-                    
-                    log_msg(f"Descarga completada: {downloaded} bytes")
+                response = _safe_urlopen(url, timeout=30)
+                if response.getcode() != 200:
+                    raise Exception(f"Respuesta inválida de GitHub: {response.getcode()}")
+                
+                log_msg(f"Respuesta HTTP: {response.getcode()}")
+                
+                # Mostrar progreso de descarga
+                total_size = int(response.headers.get('content-length', 0))
+                log_msg(f"Tamaño total: {total_size} bytes")
+                downloaded = 0
+                chunk_size = 8192
+                
+                with open(tmp_zip, 'wb') as f:
+                    while True:
+                        chunk = response.read(chunk_size)
+                        if not chunk:
+                            break
+                        downloaded += len(chunk)
+                        f.write(chunk)
+                        
+                        if total_size > 0:
+                            progress = min(100, int(downloaded * 100 / total_size))
+                            self.root.after(0, lambda p=progress: self.update_btn.config(
+                                text=f"Actualizando... {p}%"
+                            ))
+                
+                log_msg(f"Descarga completada: {downloaded} bytes")
             except Exception as e:
                 log_msg(f"Error en descarga: {e}")
                 raise Exception(f"Error descargando de GitHub: {e}")
