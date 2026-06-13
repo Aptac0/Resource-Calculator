@@ -1,4 +1,4 @@
-Nickname: [APA8]4080Aptac000
+Nickname: [APA6]4107Aptac000
 Comida: 0
 Madera: 0
 Piedra: 0
