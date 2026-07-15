@@ -106,16 +106,7 @@ How it works in short:
 2. Military research is kept to strict requirement minimums.
 3. Research remains active 24/7.
 4. The path is adjusted based on City Hall stage.
-
 ---
 
-## 🖼 Visual Resources
-
-- App: [images/app](images/app)
-- Commanders: [images/commanders](images/commanders)
-- Technology: [images/technology](images/technology)
-
----
-
-**Version:** 2.0.0  
+**Version:** 1.0.1  
 **Updated:** 2026-07-15
