@@ -1,6 +1,0 @@
-Nickname: [APA3]3979Aptac000
-Comida: 0
-Madera: 0
-Piedra: 0
-Oro: 0
----

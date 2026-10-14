@@ -1,6 +1,0 @@
-Nickname: [A7PA]4141Aptac000
-Comida: 0
-Madera: 0
-Piedra: 0
-Oro: 0
----
