@@ -1,0 +1,6 @@
+Nickname: [02AP]3949ptac000
+Comida: 0
+Madera: 0
+Piedra: 0
+Oro: 0
+---
